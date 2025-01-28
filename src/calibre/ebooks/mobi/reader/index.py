@@ -8,8 +8,7 @@ __docformat__ = 'restructuredtext en'
 import struct
 from collections import OrderedDict, namedtuple
 
-from calibre.ebooks.mobi.utils import (decint, count_set_bits,
-        decode_string)
+from calibre.ebooks.mobi.utils import count_set_bits, decint, decode_string
 from polyglot.builtins import iteritems
 
 TagX = namedtuple('TagX', 'tag num_of_values bitmask eof')
@@ -27,7 +26,7 @@ class InvalidFile(ValueError):
 
 def check_signature(data, signature):
     if data[:len(signature)] != signature:
-        raise InvalidFile('Not a valid %r section'%signature)
+        raise InvalidFile(f'Not a valid {signature!r} section')
 
 
 class NotAnINDXRecord(InvalidFile):
@@ -194,8 +193,7 @@ def get_tag_map(control_byte_count, tagx, data, strict=False):
                 total_consumed += consumed
                 values.append(byts)
             if total_consumed != x.value_bytes:
-                err = ("Error: Should consume %s bytes, but consumed %s" %
-                        (x.value_bytes, total_consumed))
+                err = (f'Error: Should consume {x.value_bytes} bytes, but consumed {total_consumed}')
                 if strict:
                     raise ValueError(err)
                 else:
@@ -203,8 +201,7 @@ def get_tag_map(control_byte_count, tagx, data, strict=False):
         ans[x.tag] = values
     # Test that all bytes have been processed
     if data.replace(b'\0', b''):
-        err = ("Warning: There are unprocessed index bytes left: %s" %
-                format_bytes(data))
+        err = (f'Warning: There are unprocessed index bytes left: {format_bytes(data)}')
         if strict:
             raise ValueError(err)
         else:

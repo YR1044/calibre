@@ -9,7 +9,7 @@ import re
 from qt.core import QTextBlockUserData
 
 from calibre.gui2.tweak_book import verify_link
-from calibre.gui2.tweak_book.editor import syntax_text_char_format, LINK_PROPERTY, CSS_PROPERTY
+from calibre.gui2.tweak_book.editor import CSS_PROPERTY, LINK_PROPERTY, syntax_text_char_format
 from calibre.gui2.tweak_book.editor.syntax.base import SyntaxHighlighter
 from polyglot.builtins import iteritems
 
@@ -52,7 +52,7 @@ content_tokens = [(re.compile(k), v, n) for k, v, n in [
     r'outline-style|outline-width|overflow(?:-x|-y)?|padding-bottom|'
     r'padding-left|padding-right|padding-top|padding|'
     r'page-break-after|page-break-before|page-break-inside|'
-    r'break-before|break-after|'
+    r'break-before|break-after|break-inside|'
     r'pause-after|pause-before|pause|pitch|pitch-range|'
     r'play-during|position|pre-wrap|pre-line|pre|quotes|richness|right|size|'
     r'speak-header|speak-numeral|speak-punctuation|speak|'
@@ -144,7 +144,7 @@ IN_COMMENT_CONTENT = 5
 
 class CSSState:
 
-    __slots__ = ('parse', 'blocks')
+    __slots__ = ('blocks', 'parse')
 
     def __init__(self):
         self.parse  = NORMAL
@@ -163,7 +163,7 @@ class CSSState:
         return not self.__eq__(other)
 
     def __repr__(self):
-        return f"CSSState(parse={self.parse}, blocks={self.blocks})"
+        return f'CSSState(parse={self.parse}, blocks={self.blocks})'
     __str__ = __repr__
 
 

@@ -5,14 +5,13 @@ __license__   = 'GPL v3'
 __copyright__ = '2012, Kovid Goyal <kovid at kovidgoyal.net>'
 __docformat__ = 'restructuredtext en'
 
-from struct import unpack_from, unpack, calcsize
 from functools import partial
+from struct import calcsize, unpack, unpack_from
 
 from calibre.utils.fonts.sfnt import UnknownTable
-from calibre.utils.fonts.sfnt.errors import UnsupportedFont, NoGlyphs
-from calibre.utils.fonts.sfnt.cff.dict_data import TopDict, PrivateDict
-from calibre.utils.fonts.sfnt.cff.constants import (cff_standard_strings,
-        STANDARD_CHARSETS)
+from calibre.utils.fonts.sfnt.cff.constants import STANDARD_CHARSETS, cff_standard_strings
+from calibre.utils.fonts.sfnt.cff.dict_data import PrivateDict, TopDict
+from calibre.utils.fonts.sfnt.errors import NoGlyphs, UnsupportedFont
 from polyglot.builtins import iteritems, itervalues
 
 # Useful links
@@ -63,7 +62,7 @@ class CFF:
         cs_type = self.top_dict.safe_get('CharstringType')
         if cs_type != 2:
             raise UnsupportedFont('This font has unsupported CharstringType: '
-                    '%s'%cs_type)
+                    f'{cs_type}')
         self.char_strings = CharStringsIndex(raw, offset)
         self.num_glyphs = len(self.char_strings)
 
@@ -134,7 +133,7 @@ class Charset(list):
         super().__init__()
         self.standard_charset = offset if offset in {0, 1, 2} else None
         if is_CID and self.standard_charset is not None:
-            raise ValueError("CID font must not use a standard charset")
+            raise ValueError('CID font must not use a standard charset')
         if self.standard_charset is None:
             self.append(b'.notdef')
             fmt = unpack_from(b'>B', raw, offset)[0]

@@ -7,12 +7,13 @@ __docformat__ = 'restructuredtext en'
 
 import traceback
 from collections import OrderedDict
-from operator import itemgetter
 from functools import partial
+from operator import itemgetter
 
-from calibre.utils.icu import safe_chr, ord_string
 from calibre.utils.fonts.sfnt.container import Sfnt
-from calibre.utils.fonts.sfnt.errors import UnsupportedFont, NoGlyphs
+from calibre.utils.fonts.sfnt.errors import NoGlyphs, UnsupportedFont
+from calibre.utils.icu import ord_string, safe_chr
+from calibre.utils.resources import get_path as P
 from polyglot.builtins import iteritems, itervalues
 
 # TrueType outlines {{{
@@ -163,7 +164,7 @@ def subset(raw, individual_chars, ranges=(), warnings=None):
             gsub.decompile()
             extra_glyphs = gsub.all_substitutions(itervalues(character_map))
         except UnsupportedFont as e:
-            warn('Usupported GSUB table: %s'%e)
+            warn(f'Usupported GSUB table: {e}')
         except Exception:
             warn('Failed to decompile GSUB table:', traceback.format_exc())
 
@@ -184,7 +185,7 @@ def subset(raw, individual_chars, ranges=(), warnings=None):
         try:
             sfnt[b'kern'].restrict_to_glyphs(frozenset(itervalues(character_map)))
         except UnsupportedFont as e:
-            warn('kern table unsupported, ignoring: %s'%e)
+            warn(f'kern table unsupported, ignoring: {e}')
         except Exception:
             warn('Subsetting of kern table failed, ignoring:',
                     traceback.format_exc())
@@ -192,11 +193,12 @@ def subset(raw, individual_chars, ranges=(), warnings=None):
     raw, new_sizes = sfnt()
     return raw, old_sizes, new_sizes
 
-# CLI {{{
 
+# CLI {{{
 
 def option_parser():
     import textwrap
+
     from calibre.utils.config import OptionParser
     parser = OptionParser(usage=textwrap.dedent('''\
             %prog [options] input_font_file output_font_file characters_to_keep
@@ -223,7 +225,7 @@ def print_stats(old_stats, new_stats):
     prints('='*80)
     old_total = sum(itervalues(old_stats))
     new_total = sum(itervalues(new_stats))
-    tables = sorted(old_stats, key=lambda x:old_stats[x],
+    tables = sorted(old_stats, key=lambda x: old_stats[x],
             reverse=True)
     for table in tables:
         osz = old_stats[table]
@@ -233,13 +235,15 @@ def print_stats(old_stats, new_stats):
         suffix = ' | same size'
         if nsz != osz:
             suffix = ' | reduced to %.1f %%'%(nsz/osz * 100)
-        prints('%4s'%table, '  ', '%10s'%osz, '  ', '%5.1f %%'%op, '   ',
-                '%10s'%nsz, '  ', '%5.1f %%'%np, suffix)
+        prints('%4s'%table, '  ', '%10s'%osz, '  ', f'{op:5.1f} %', '   ',
+                '%10s'%nsz, '  ', f'{np:5.1f} %', suffix)
     prints('='*80)
 
 
 def main(args):
-    import sys, time
+    import sys
+    import time
+
     from calibre import prints
     parser = option_parser()
     opts, args = parser.parse_args(args)
@@ -250,7 +254,7 @@ def main(args):
     with open(iff, 'rb') as f:
         orig = f.read()
 
-    chars = [x for x in chars.split(',')]
+    chars = chars.split(',')
     individual, ranges = set(), set()
 
     def not_single(c):
@@ -287,8 +291,8 @@ def main(args):
     def sz(x):
         return '%gKB'%(len(x)/1024.)
     print_stats(old_stats, new_stats)
-    prints('Original size:', sz(orig), 'Subset size:', sz(sf), 'Reduced to: %g%%'%(reduced))
-    prints('Subsetting took %g seconds'%taken)
+    prints('Original size:', sz(orig), 'Subset size:', sz(sf), f'Reduced to: {reduced:g}%')
+    prints(f'Subsetting took {taken:g} seconds')
     with open(off, 'wb') as f:
         f.write(sf)
     prints('Subset font written to:', off)
@@ -296,20 +300,20 @@ def main(args):
 
 if __name__ == '__main__':
     try:
-        import init_calibre
-        init_calibre
+        import init_calibre  # noqa: F401
     except ImportError:
         pass
     import sys
     main(sys.argv)
 # }}}
 
+
 # Tests {{{
 
-
 def test_mem():
-    from calibre.utils.mem import memory
     import gc
+
+    from calibre.utils.mem import memory
     gc.collect()
     start_mem = memory()
     raw = P('fonts/liberation/LiberationSerif-Regular.ttf', data=True)
@@ -346,7 +350,7 @@ def all():
                 sf, old_stats, new_stats = subset(raw, {'a', 'b', 'c'},
                         (), w)
                 if w:
-                    warnings[font['full_name'] + ' (%s)'%font['path']] = w
+                    warnings[font['full_name'] + ' ({})'.format(font['path'])] = w
             except NoGlyphs:
                 print('No glyphs!')
                 continue
@@ -359,7 +363,7 @@ def all():
                 failed.append((font['full_name'], font['path'], str(e)))
             else:
                 averages.append(sum(itervalues(new_stats))/sum(itervalues(old_stats)) * 100)
-                print('Reduced to:', '%.1f'%averages[-1] , '%')
+                print('Reduced to:', f'{averages[-1]:.1f}', '%')
     if unsupported:
         print('\n\nUnsupported:')
         for name, path, err in unsupported:
@@ -380,6 +384,5 @@ def all():
     print('Average reduction to: %.1f%%'%(sum(averages)/len(averages)))
     print('Total:', total, 'Unsupported:', len(unsupported), 'Failed:',
             len(failed), 'Warnings:', len(warnings))
-
 
 # }}}

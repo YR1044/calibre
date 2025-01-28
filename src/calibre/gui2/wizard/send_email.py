@@ -10,14 +10,27 @@ from functools import partial
 from threading import Thread
 
 from qt.core import (
-    QWidget, pyqtSignal, QDialog, Qt, QLabel, QLineEdit, QDialogButtonBox,
-    QGridLayout, QCheckBox, QIcon, QVBoxLayout, QPushButton, QPlainTextEdit,
-    QHBoxLayout)
+    QCheckBox,
+    QDialog,
+    QDialogButtonBox,
+    QGridLayout,
+    QHBoxLayout,
+    QIcon,
+    QLabel,
+    QLineEdit,
+    QPlainTextEdit,
+    QPushButton,
+    Qt,
+    QVBoxLayout,
+    QWidget,
+    pyqtSignal,
+)
 
 from calibre import prints
-from calibre.gui2.wizard.send_email_ui import Ui_Form
-from calibre.utils.smtp import config as smtp_prefs
 from calibre.gui2 import error_dialog, question_dialog
+from calibre.gui2.wizard.send_email_ui import Ui_Form
+from calibre.utils.localization import _
+from calibre.utils.smtp import config as smtp_prefs
 from polyglot.binary import as_hex_unicode, from_hex_unicode
 from polyglot.io import PolyglotStringIO
 
@@ -29,11 +42,11 @@ class TestEmail(QDialog):
     def __init__(self, pa, parent):
         QDialog.__init__(self, parent)
         self.test_func = parent.test_email_settings
-        self.setWindowTitle(_("Test email settings"))
-        self.setWindowIcon(QIcon(I('config.ui')))
+        self.setWindowTitle(_('Test email settings'))
+        self.setWindowIcon(QIcon.ic('config.ui'))
         l = QVBoxLayout(self)
         opts = smtp_prefs().parse()
-        self.from_ = la = QLabel(_("Send test mail from %s to:")%opts.from_)
+        self.from_ = la = QLabel(_('Send test mail from %s to:')%opts.from_)
         l.addWidget(la)
         self.to = le = QLineEdit(self)
         if pa:
@@ -98,7 +111,7 @@ class RelaySetup(QDialog):
         bb.rejected.connect(self.reject)
         self.tl = QLabel(('<p>'+_('Setup sending email using') +
                 ' <b>{name}</b><p>' +
-            _('If you don\'t have an account, you can sign up for a free {name} email '
+            _("If you don't have an account, you can sign up for a free {name} email "
             'account at <a href="https://{url}">{url}</a>. {extra}')).format(
                 **service))
         l.addWidget(self.tl, 0, 0, 3, 0)
@@ -187,11 +200,11 @@ class SendEmail(QWidget, Ui_Form):
         getattr(self, 'relay_'+opts.encryption.lower()).setChecked(True)
         self.relay_tls.toggled.connect(self.changed)
 
-        for x in ('gmx', 'hotmail'):
+        for x in ('gmx',):
             button = getattr(self, 'relay_use_'+x)
             button.clicked.connect(partial(self.create_service_relay, x))
         self.relay_show_password.stateChanged.connect(
-         lambda state : self.relay_password.setEchoMode(
+         lambda state: self.relay_password.setEchoMode(
              QLineEdit.EchoMode.Password if
              state == 0 else QLineEdit.EchoMode.Normal))
         self.test_email_button.clicked.connect(self.test_email)
@@ -211,7 +224,7 @@ class SendEmail(QWidget, Ui_Form):
 
     def test_email_settings(self, to):
         opts = smtp_prefs().parse()
-        from calibre.utils.smtp import sendmail, create_mail
+        from calibre.utils.smtp import create_mail, sendmail
         buf = PolyglotStringIO()
         debug_out = partial(prints, file=buf)
         oout, oerr = sys.stdout, sys.stderr

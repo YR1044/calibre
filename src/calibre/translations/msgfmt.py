@@ -2,7 +2,7 @@
 # Written by Martin v. Löwis <loewis@informatik.hu-berlin.de>
 
 
-"""Generate binary message catalog from textual translation description.
+'''Generate binary message catalog from textual translation description.
 
 This program converts a textual Uniforum-style message catalog (.po file) into
 a binary GNU catalog (.mo file).  This is essentially the same function as the
@@ -24,20 +24,22 @@ Options:
     -V
     --version
         Display version information and exit.
-"""
+'''
 
-import os
-import sys
+import array
 import ast
 import getopt
+import os
 import struct
-import array
+import sys
 from email.parser import HeaderParser
 
-__version__ = "1.2"
+__version__ = '1.2'
 
 MESSAGES = {}
-STATS = {'translated': 0, 'untranslated': 0}
+STATS = {'translated': 0, 'untranslated': 0, 'uniqified': 0}
+MAKE_UNIQUE = False
+NON_UNIQUE = set()
 
 
 def usage(code, msg=''):
@@ -47,22 +49,28 @@ def usage(code, msg=''):
     sys.exit(code)
 
 
-def add(ctxt, id, str, fuzzy):
-    "Add a non-fuzzy translation to the dictionary."
-    if (not fuzzy or not id) and str:
-        if id:
+def add(ctxt, msgid, msgstr, fuzzy):
+    'Add a non-fuzzy translation to the dictionary.'
+    if (not fuzzy or not msgid) and msgstr:
+        if msgid:
             STATS['translated'] += 1
         if ctxt is None:
-            MESSAGES[id] = str
+            if msgstr in NON_UNIQUE:
+                STATS['uniqified'] += 1
+                if MAKE_UNIQUE:
+                    msgstr += b' (' + msgid + b')'
+            else:
+                NON_UNIQUE.add(msgstr)
+            MESSAGES[msgid] = msgstr
         else:
-            MESSAGES[b"%b\x04%b" % (ctxt, id)] = str
+            MESSAGES[b'%b\x04%b' % (ctxt, msgid)] = msgstr
     else:
-        if id:
+        if msgid:
             STATS['untranslated'] += 1
 
 
 def generate():
-    "Return the generated output."
+    'Return the generated output.'
     # the keys are sorted in the .mo file
     keys = sorted(MESSAGES.keys())
     offsets = []
@@ -88,17 +96,17 @@ def generate():
         koffsets += [l1, o1+keystart]
         voffsets += [l2, o2+valuestart]
     offsets = koffsets + voffsets
-    output = struct.pack("Iiiiiii",
+    output = struct.pack('Iiiiiii',
                          0x950412de,       # Magic
                          0,                 # Version
-                         len(keys),         # # of entries
+                         len(keys),         # of entries
                          7*4,               # start of key index
                          7*4+len(keys)*8,   # start of value index
                          0, 0)              # size and offset of hash table
     try:
-        output += array.array("i", offsets).tobytes()
+        output += array.array('i', offsets).tobytes()
     except AttributeError:
-        output += array.array("i", offsets).tostring()
+        output += array.array('i', offsets).tostring()
     output += ids
     output += strs
     return output
@@ -227,7 +235,7 @@ def make(filename, outfile):
         if hasattr(outfile, 'write'):
             outfile.write(output)
         else:
-            with open(outfile, "wb") as f:
+            with open(outfile, 'wb') as f:
                 f.write(output)
     except OSError as msg:
         print(msg, file=sys.stderr)
@@ -235,19 +243,22 @@ def make(filename, outfile):
 
 def make_with_stats(filename, outfile):
     MESSAGES.clear()
-    STATS['translated'] = STATS['untranslated'] = 0
+    NON_UNIQUE.clear()
+    STATS['translated'] = STATS['untranslated'] = STATS['uniqified'] = 0
     make(filename, outfile)
-    return STATS['translated'], STATS['untranslated']
+    return STATS.copy()
 
 
 def run_batch(pairs):
-    for (filename, outfile) in pairs:
+    for filename, outfile in pairs:
         yield make_with_stats(filename, outfile)
 
 
 def main():
+    global MAKE_UNIQUE
     args = sys.argv[1:]
-    if args == ['STDIN']:
+    if args[0] == 'STDIN':
+        MAKE_UNIQUE = args[1] == 'uniqify'
         import json
         results = tuple(run_batch(json.loads(sys.stdin.buffer.read())))
         sys.stdout.buffer.write(json.dumps(results).encode('utf-8'))
@@ -266,7 +277,7 @@ def main():
         if opt in ('-h', '--help'):
             usage(0)
         elif opt in ('-V', '--version'):
-            print("msgfmt.py", __version__, file=sys.stderr)
+            print('msgfmt.py', __version__, file=sys.stderr)
             sys.exit(0)
         elif opt in ('-o', '--output-file'):
             outfile = arg
@@ -279,7 +290,7 @@ def main():
         return
 
     for filename in args:
-        translated, untranslated = make_with_stats(filename, outfile)
+        make_with_stats(filename, outfile)
         if output_stats:
             print(STATS['translated'], 'translated messages,', STATS['untranslated'], 'untranslated messages.')
 

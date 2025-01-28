@@ -2,15 +2,17 @@ __license__   = 'GPL v3'
 __copyright__ = '2008, Kovid Goyal <kovid at kovidgoyal.net>'
 '''Read meta information from PDF files'''
 
-import os, subprocess, shutil, re
+import os
+import re
+import shutil
+import subprocess
 from functools import partial
 
 from calibre import prints
 from calibre.constants import iswindows
+from calibre.ebooks.metadata import MetaInformation, check_doi, check_isbn, string_to_authors
 from calibre.ptempfile import TemporaryDirectory
-from calibre.ebooks.metadata import (
-    MetaInformation, string_to_authors, check_isbn, check_doi)
-from calibre.utils.ipc.simple_worker import fork_job, WorkerError
+from calibre.utils.ipc.simple_worker import WorkerError, fork_job
 from polyglot.builtins import iteritems
 
 
@@ -92,7 +94,7 @@ def page_images(pdfpath, outputdir='.', first=1, last=1, image_format='jpeg', pr
             '-l', str(last), pdfpath, os.path.join(outputdir, prefix)
         ], **args)
     except subprocess.CalledProcessError as e:
-        raise ValueError('Failed to render PDF, pdftoppm errorcode: %s'%e.returncode)
+        raise ValueError(f'Failed to render PDF, pdftoppm errorcode: {e.returncode}')
 
 
 def is_pdf_encrypted(path_to_pdf):
@@ -136,7 +138,7 @@ def get_metadata(stream, cover=True):
         au = string_to_authors(au)
     mi = MetaInformation(title, au)
     # if isbn is not None:
-    #    mi.isbn = isbn
+    #     mi.isbn = isbn
 
     creator = info.get('Creator', None)
     if creator:

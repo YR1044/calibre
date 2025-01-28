@@ -9,10 +9,7 @@ import struct
 from collections import OrderedDict, namedtuple
 
 from calibre.ebooks.mobi.reader.headers import NULL_INDEX
-from calibre.ebooks.mobi.reader.index import (
-    CNCX, INDEX_HEADER_FIELDS, get_tag_section_start, parse_index_record,
-    parse_indx_header, parse_tagx_section
-)
+from calibre.ebooks.mobi.reader.index import CNCX, INDEX_HEADER_FIELDS, get_tag_section_start, parse_index_record, parse_indx_header, parse_tagx_section
 from calibre.ebooks.mobi.reader.ncx import default_entry, tag_fieldname_map
 from polyglot.builtins import iteritems
 
@@ -54,7 +51,7 @@ def read_variable_len_data(data, header):
         header['tagx_block_size'] = 0
     trailing_bytes = data[idxt_offset+idxt_size:]
     if trailing_bytes.rstrip(b'\0'):
-        raise ValueError('Traling bytes after last IDXT entry: %r' % trailing_bytes.rstrip(b'\0'))
+        raise ValueError('Traling bytes after last IDXT entry: {!r}'.format(trailing_bytes.rstrip(b'\0')))
     header['indices'] = indices
 
 
@@ -116,7 +113,7 @@ class Index:
         if self.table is not None:
             a('*'*10 + ' %d Index Entries '%len(self.table) + '*'*10)
             for k, v in iteritems(self.table):
-                a('%s: %r'%(k, v))
+                a(f'{k}: {v!r}')
 
         if self.records:
             ans.extend(['', '', '*'*10 + ' Parsed Entries ' + '*'*10])
@@ -188,8 +185,7 @@ class GuideIndex(Index):
             for i, text in enumerate(self.table):
                 tag_map = self.table[text]
                 if set(tag_map) not in ({1, 6}, {1, 2, 3}):
-                    raise ValueError('Guide Index has unknown tags: %s'%
-                            tag_map)
+                    raise ValueError(f'Guide Index has unknown tags: {tag_map}')
 
                 title = self.cncx[tag_map[1][0]]
                 self.records.append(GuideRef(

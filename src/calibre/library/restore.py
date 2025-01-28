@@ -5,17 +5,21 @@ __license__   = 'GPL v3'
 __copyright__ = '2010, Kovid Goyal <kovid@kovidgoyal.net>'
 __docformat__ = 'restructuredtext en'
 
-import re, os, traceback, shutil
-from threading import Thread
+import os
+import re
+import shutil
+import traceback
 from operator import itemgetter
+from threading import Thread
 
-from calibre.ptempfile import TemporaryDirectory
+from calibre import isbytestring
+from calibre.constants import filesystem_encoding
 from calibre.ebooks.metadata.opf2 import OPF
 from calibre.library.database2 import LibraryDatabase2
 from calibre.library.prefs import DBPrefs
-from calibre.constants import filesystem_encoding
+from calibre.ptempfile import TemporaryDirectory
 from calibre.utils.date import utcfromtimestamp
-from calibre import isbytestring
+from calibre.utils.localization import _
 from polyglot.builtins import iteritems
 
 NON_EBOOK_EXTENSIONS = frozenset([
@@ -78,17 +82,13 @@ class Restore(Thread):
 
         if self.conflicting_custom_cols:
             ans += '\n\n'
-            ans += 'The following custom columns have conflicting definitions ' \
-                    'and were not fully restored:\n'
+            ans += ('The following custom columns have conflicting definitions '
+                    'and were not fully restored:\n')
             for x in self.conflicting_custom_cols:
                 ans += '\t#'+x+'\n'
-                ans += '\tused:\t%s, %s, %s, %s\n'%(self.custom_columns[x][1],
-                                                    self.custom_columns[x][2],
-                                                    self.custom_columns[x][3],
-                                                    self.custom_columns[x][5])
+                ans += f'\tused:\t{self.custom_columns[x][1]}, {self.custom_columns[x][2]}, {self.custom_columns[x][3]}, {self.custom_columns[x][5]}\n'
                 for coldef in self.conflicting_custom_cols[x]:
-                    ans += '\tother:\t%s, %s, %s, %s\n'%(coldef[1], coldef[2],
-                                                         coldef[3], coldef[5])
+                    ans += f'\tother:\t{coldef[1]}, {coldef[2]}, {coldef[3]}, {coldef[5]}\n'
 
         if self.mismatched_dirs:
             ans += '\n\n'
@@ -199,7 +199,7 @@ class Restore(Thread):
         alm = mi.get('author_link_map', {})
         for author, link in iteritems(alm):
             existing_link, timestamp = self.authors_links.get(author, (None, None))
-            if existing_link is None or existing_link != link and timestamp < mi.timestamp:
+            if existing_link is None or (existing_link != link and timestamp < mi.timestamp):
                 self.authors_links[author] = (link, mi.timestamp)
 
     def create_cc_metadata(self):

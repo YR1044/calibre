@@ -4,14 +4,15 @@
 __license__ = 'GPL v3'
 __copyright__ = '2013, Kovid Goyal <kovid at kovidgoyal.net>'
 
-import copy, os, re
-from polyglot.builtins import string_or_bytes
+import copy
+import os
+import re
 
-from calibre.ebooks.oeb.base import barename, XPNSMAP, XPath, OPF, XHTML, OEB_DOCS
+from calibre.ebooks.oeb.base import OEB_DOCS, OPF, XHTML, XPNSMAP, XPath, barename
 from calibre.ebooks.oeb.polish.errors import MalformedMarkup
-from calibre.ebooks.oeb.polish.toc import node_from_loc
 from calibre.ebooks.oeb.polish.replace import LinkRebaser
-from polyglot.builtins import iteritems
+from calibre.ebooks.oeb.polish.toc import node_from_loc
+from polyglot.builtins import iteritems, string_or_bytes
 from polyglot.urllib import urlparse
 
 
@@ -502,11 +503,11 @@ def merge(container, category, names, master):
     :param master: Which of the merged files is the *master* file, that is, the file that will remain after merging.
     '''
     if category not in {'text', 'styles'}:
-        raise AbortError('Cannot merge files of type: %s' % category)
+        raise AbortError(f'Cannot merge files of type: {category}')
     if len(names) < 2:
         raise AbortError('Must specify at least two files to be merged')
     if master not in names:
-        raise AbortError('The master file (%s) must be one of the files being merged' % master)
+        raise AbortError(f'The master file ({master}) must be one of the files being merged')
 
     if category == 'text':
         merge_html(container, names, master)

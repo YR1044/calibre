@@ -9,30 +9,53 @@ import json
 import os
 import textwrap
 from functools import partial
+
 from qt.core import (
-    QAbstractItemView, QAbstractListModel, QApplication, QCheckBox, QComboBox,
-    QDialog, QDialogButtonBox, QDoubleValidator, QFrame, QGridLayout, QIcon,
-    QIntValidator, QItemSelectionModel, QLabel, QLineEdit, QListView,
-    QPalette, QPushButton, QScrollArea, QSize, QSizePolicy, QSpacerItem,
-    QStandardItem, QStandardItemModel, Qt, QToolButton, QVBoxLayout, QWidget,
-    QItemSelection, QListWidget, QListWidgetItem, pyqtSignal
+    QAbstractItemView,
+    QAbstractListModel,
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QDoubleValidator,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QIcon,
+    QIntValidator,
+    QItemSelection,
+    QItemSelectionModel,
+    QLabel,
+    QLineEdit,
+    QListView,
+    QListWidget,
+    QListWidgetItem,
+    QPalette,
+    QPushButton,
+    QScrollArea,
+    QSize,
+    QSizePolicy,
+    QSpacerItem,
+    QStandardItem,
+    QStandardItemModel,
+    Qt,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
+    pyqtSignal,
 )
 
 from calibre import as_unicode, prepare_string_for_xml, sanitize_file_name
 from calibre.constants import config_dir
-from calibre.gui2 import (
-    choose_files, choose_save_file, error_dialog, gprefs, open_local_file,
-    pixmap_to_data, question_dialog
-)
+from calibre.gui2 import choose_files, choose_save_file, error_dialog, gprefs, info_dialog, open_local_file, pixmap_to_data, question_dialog
 from calibre.gui2.dialogs.template_dialog import TemplateDialog
 from calibre.gui2.metadata.single_download import RichTextDelegate
+from calibre.gui2.preferences import ListViewWithMoveByKeyPress
 from calibre.gui2.widgets2 import ColorButton, FlowLayout, Separator
-from calibre.library.coloring import (
-    Rule, color_row_key, conditionable_columns, displayable_columns,
-    rule_from_template
-)
+from calibre.library.coloring import Rule, color_row_key, conditionable_columns, displayable_columns, rule_from_template
 from calibre.utils.icu import lower, sort_key
-from calibre.utils.localization import lang_map
+from calibre.utils.localization import lang_map, ngettext
 from polyglot.builtins import iteritems
 
 all_columns_string = _('All columns')
@@ -46,11 +69,11 @@ icon_rule_kinds = [(_('icon with text'), 'icon'),
 class ConditionEditor(QWidget):  # {{{
 
     ACTION_MAP = {
-            'bool2' : (
+            'bool2': (
                     (_('is true'), 'is true',),
                     (_('is false'), 'is not true'),
             ),
-            'bool' : (
+            'bool': (
                     (_('is true'), 'is true',),
                     (_('is not true'), 'is not true'),
                     (_('is false'), 'is false'),
@@ -58,22 +81,22 @@ class ConditionEditor(QWidget):  # {{{
                     (_('is undefined'), 'is undefined'),
                     (_('is defined'), 'is defined'),
             ),
-            'ondevice' : (
+            'ondevice': (
                     (_('is true'), 'is set',),
                     (_('is false'), 'is not set'),
             ),
-            'identifiers' : (
+            'identifiers': (
                 (_('has id'), 'has id'),
                 (_('does not have id'), 'does not have id'),
             ),
-            'int' : (
+            'int': (
                 (_('is equal to'), 'eq'),
                 (_('is less than'), 'lt'),
                 (_('is greater than'), 'gt'),
                 (_('is set'), 'is set'),
                 (_('is not set'), 'is not set')
             ),
-            'datetime' : (
+            'datetime': (
                 (_('is equal to'), 'eq'),
                 (_('is earlier than'), 'lt'),
                 (_('is later than'), 'gt'),
@@ -85,7 +108,7 @@ class ConditionEditor(QWidget):  # {{{
                 (_('is more days from now than'), 'newer future days'),
                 (_('is fewer days from now than'), 'older future days')
             ),
-            'multiple' : (
+            'multiple': (
                 (_('has'), 'has'),
                 (_('does not have'), 'does not have'),
                 (_('has pattern'), 'has pattern'),
@@ -93,13 +116,13 @@ class ConditionEditor(QWidget):  # {{{
                 (_('is set'), 'is set'),
                 (_('is not set'), 'is not set'),
             ),
-            'multiple_no_isset' : (
+            'multiple_no_isset': (
                 (_('has'), 'has'),
                 (_('does not have'), 'does not have'),
                 (_('has pattern'), 'has pattern'),
                 (_('does not have pattern'), 'does not have pattern'),
             ),
-            'single'   : (
+            'single': (
                 (_('is'), 'is'),
                 (_('is not'), 'is not'),
                 (_('contains'), 'contains'),
@@ -109,7 +132,7 @@ class ConditionEditor(QWidget):  # {{{
                 (_('is set'), 'is set'),
                 (_('is not set'), 'is not set'),
             ),
-            'single_no_isset'   : (
+            'single_no_isset': (
                 (_('is'), 'is'),
                 (_('is not'), 'is not'),
                 (_('contains'), 'contains'),
@@ -181,7 +204,7 @@ class ConditionEditor(QWidget):  # {{{
             if c == val:
                 self.column_box.setCurrentIndex(idx)
                 return
-        raise ValueError('Column %r not found'%val)
+        raise ValueError(f'Column {val!r} not found')
 
     @property
     def current_action(self):
@@ -195,7 +218,7 @@ class ConditionEditor(QWidget):  # {{{
             if c == val:
                 self.action_box.setCurrentIndex(idx)
                 return
-        raise ValueError('Action %r not valid for current column'%val)
+        raise ValueError(f'Action {val!r} not valid for current column')
 
     @property
     def current_val(self):
@@ -210,11 +233,10 @@ class ConditionEditor(QWidget):  # {{{
     @property
     def condition(self):
 
-        c, a, v = (self.current_col, self.current_action,
-                self.current_val)
+        c, a, v = (self.current_col, self.current_action, self.current_val)
         if not c or not a:
             return None
-        return (c, a, v)
+        return c, a, v
 
     @condition.setter
     def condition(self, condition):
@@ -384,7 +406,7 @@ class RuleEditor(QDialog):  # {{{
             self.rule_kind = 'emblem'
             rule_text = _('Cover grid emblem')
 
-        self.setWindowIcon(QIcon(I('format-fill-color.png')))
+        self.setWindowIcon(QIcon.ic('format-fill-color.png'))
         self.setWindowTitle(_('Create/edit a {0} rule').format(rule_text))
 
         self.l = l = QGridLayout(self)
@@ -421,8 +443,6 @@ class RuleEditor(QDialog):  # {{{
                 ' first rule to match will be used.')))
             self.l3 = l3 = QLabel(_('of the column:'))
             l.addWidget(l3, 2, 2)
-        else:
-            pass
 
         self.column_box = QComboBox(self)
         l.addWidget(self.column_box, 3, 0 if self.rule_kind == 'color' else 2)
@@ -451,7 +471,7 @@ class RuleEditor(QDialog):  # {{{
         elif self.rule_kind == 'emblem':
             create_filename_box()
             self.update_filename_box()
-            self.filename_button = QPushButton(QIcon(I('document_open.png')),
+            self.filename_button = QPushButton(QIcon.ic('document_open.png'),
                                                _('&Add new image'))
             l.addWidget(self.filename_box, 3, 0)
             l.addWidget(self.filename_button, 3, 2)
@@ -465,7 +485,7 @@ class RuleEditor(QDialog):  # {{{
             self.multiple_icon_cb.clicked.connect(self.multiple_box_clicked)
             l.addWidget(self.filename_box, 3, 5)
 
-            self.filename_button = QPushButton(QIcon(I('document_open.png')),
+            self.filename_button = QPushButton(QIcon.ic('document_open.png'),
                                                _('&Add icon'))
             l.addWidget(self.filename_button, 3, 6)
             l.addWidget(QLabel(_('(Icons should be square or landscape)')), 4, 6)
@@ -481,7 +501,7 @@ class RuleEditor(QDialog):  # {{{
         sa.setWidgetResizable(True)
         l.addWidget(sa, 6, 0, 1, 8)
 
-        self.add_button = b = QPushButton(QIcon(I('plus.png')),
+        self.add_button = b = QPushButton(QIcon.ic('plus.png'),
                 _('Add &another condition'))
         l.addWidget(b, 7, 0, 1, 8)
         b.clicked.connect(self.add_blank_condition)
@@ -490,14 +510,22 @@ class RuleEditor(QDialog):  # {{{
             ' blanking all of its boxes'))
         l.addWidget(l6, 8, 0, 1, 8)
 
+        bbl = QHBoxLayout()
         self.bb = bb = QDialogButtonBox(
                 QDialogButtonBox.StandardButton.Ok|QDialogButtonBox.StandardButton.Cancel)
         bb.accepted.connect(self.accept)
         bb.rejected.connect(self.reject)
-        l.addWidget(bb, 9, 0, 1, 8)
+        if self.rule_kind in ('emblem', 'icon'):
+            theme_button = QPushButton(_('Using icons in light/dark themes'))
+            theme_button.setIcon(QIcon.ic('help.png'))
+            theme_button.clicked.connect(self.show_theme_help)
+            bbl.addWidget(theme_button)
+        bbl.addStretch(10)
+        bbl.addWidget(bb)
+        l.addLayout(bbl, 9, 0, 1, 8)
         if self.rule_kind != 'color':
             self.remove_button = b = bb.addButton(_('&Remove icons'), QDialogButtonBox.ButtonRole.ActionRole)
-            b.setIcon(QIcon(I('minus.png')))
+            b.setIcon(QIcon.ic('minus.png'))
             b.clicked.connect(self.remove_icon_file_dialog)
             b.setToolTip('<p>' + _('Remove previously added icons. Note that removing an '
                                    'icon will cause rules that use it to stop working.') + '</p>')
@@ -533,6 +561,30 @@ class RuleEditor(QDialog):  # {{{
 
         self.resize(self.sizeHint())
 
+    def show_theme_help(self):
+        msg = '<p>'+ _(
+            'You can use different icons in light and dark themes. To do this, '
+            'add two icons to the icon list. One of the icons must have either the '
+            '"plain" name, for example "ok.png", or the themed name, for example '
+            '"ok-for-light-theme.png". The other icon must have a themed name with '
+            'the same prefix, for example "ok-for-dark-theme.png". '
+            '</p><p>'
+            'Example: if the light theme icon is named "ok.png" then the dark '
+            'theme icon must be named "ok-for-dark-theme.png". If the light '
+            'theme icon is named "ok-for-light-theme.png" then the dark theme '
+            'icon must be named either ok.png or "ok-for-dark-theme.png".'
+            '</p><p>'
+            'When defining a rule, use either of the icon names. The correct '
+            'icon for the theme will automatically be used, if it exists.'
+            '</p><p>'
+            'You are not required to change existing rules to use theming. Decide '
+            'the theme where the existing icon should be used then add the '
+            'other icon with the correct themed name. '
+            '</p><p>'
+            'Remember to add both the light and dark theme icons to the list of icons.'
+        ) + '</p>'
+        info_dialog(self, _('Using icons in light/dark themes'), msg, show=True)
+
     def multiple_box_clicked(self):
         self.update_filename_box()
         self.update_icon_filenames_in_box()
@@ -559,7 +611,7 @@ class RuleEditor(QDialog):  # {{{
         self.icon_file_names.sort(key=sort_key)
         if doing_multiple:
             item = QStandardItem(_('Open to see checkboxes'))
-            item.setIcon(QIcon(I('blank.png')))
+            item.setIcon(QIcon.ic('blank.png'))
         else:
             item = QStandardItem('')
         item.setFlags(Qt.ItemFlag(0))
@@ -625,7 +677,6 @@ class RuleEditor(QDialog):  # {{{
         except:
             import traceback
             traceback.print_exc()
-        return
 
     def get_filenames_from_box(self):
         if self.doing_multiple:
@@ -811,7 +862,7 @@ class RulesModel(QAbstractListModel):  # {{{
                 col = self.fm[col]['name']
             return self.rule_to_html(kind, col, rule)
         if role == Qt.ItemDataRole.UserRole:
-            return (kind, col, rule)
+            return kind, col, rule
 
     def add_rule(self, kind, col, rule, selected_row=None):
         self.beginResetModel()
@@ -956,10 +1007,10 @@ class RulesModel(QAbstractListModel):  # {{{
 # }}}
 
 
-class RulesView(QListView):  # {{{
+class RulesView(ListViewWithMoveByKeyPress):  # {{{
 
     def __init__(self, parent, enable_convert_buttons_function):
-        QListView.__init__(self, parent)
+        ListViewWithMoveByKeyPress.__init__(self, parent)
         self.enable_convert_buttons_function = enable_convert_buttons_function
 
     def currentChanged(self, new, prev):
@@ -989,9 +1040,9 @@ class EditRules(QWidget):  # {{{
         l1.setWordWrap(True)
         l.addWidget(l1, l.rowCount(), 0, 1, 2)
 
-        self.add_button = QPushButton(QIcon(I('plus.png')), _('&Add rule'),
+        self.add_button = QPushButton(QIcon.ic('plus.png'), _('&Add rule'),
                 self)
-        self.remove_button = QPushButton(QIcon(I('minus.png')),
+        self.remove_button = QPushButton(QIcon.ic('minus.png'),
                 _('&Remove rule(s)'), self)
         self.add_button.clicked.connect(self.add_rule)
         self.remove_button.clicked.connect(self.remove_rule)
@@ -1008,31 +1059,33 @@ class EditRules(QWidget):  # {{{
         g.addWidget(self.rules_view, 0, 0, 2, 1)
 
         self.up_button = b = QToolButton(self)
-        b.setIcon(QIcon(I('arrow-up.png')))
+        b.setIcon(QIcon.ic('arrow-up.png'))
         b.setToolTip(_('Move the selected rule up'))
         b.clicked.connect(partial(self.move_rows, moving_up=True))
         g.addWidget(b, 0, 1, 1, 1, Qt.AlignmentFlag.AlignTop)
         self.down_button = b = QToolButton(self)
-        b.setIcon(QIcon(I('arrow-down.png')))
+        b.setIcon(QIcon.ic('arrow-down.png'))
         b.setToolTip(_('Move the selected rule down'))
         b.clicked.connect(partial(self.move_rows, moving_up=False))
+        self.rules_view.set_movement_functions(partial(self.move_rows, moving_up=True),
+                                               partial(self.move_rows, moving_up=False))
         g.addWidget(b, 1, 1, 1, 1, Qt.AlignmentFlag.AlignBottom)
 
         l.addLayout(g, l.rowCount(), 0, 1, 2)
         l.setRowStretch(l.rowCount() - 1, 10)
 
-        self.add_advanced_button = b = QPushButton(QIcon(I('plus.png')),
+        self.add_advanced_button = b = QPushButton(QIcon.ic('plus.png'),
                 _('Add ad&vanced rule'), self)
         b.clicked.connect(self.add_advanced)
         self.hb = hb = FlowLayout()
         l.addLayout(hb, l.rowCount(), 0, 1, 2)
         hb.addWidget(b)
-        self.duplicate_rule_button = b = QPushButton(QIcon(I('edit-copy.png')),
+        self.duplicate_rule_button = b = QPushButton(QIcon.ic('edit-copy.png'),
                 _('Du&plicate rule'), self)
         b.clicked.connect(self.duplicate_rule)
         b.setEnabled(False)
         hb.addWidget(b)
-        self.convert_to_advanced_button = b = QPushButton(QIcon(I('modified.png')),
+        self.convert_to_advanced_button = b = QPushButton(QIcon.ic('modified.png'),
                 _('Convert to advanced r&ule'), self)
         b.clicked.connect(self.convert_to_advanced)
         b.setEnabled(False)
@@ -1040,7 +1093,7 @@ class EditRules(QWidget):  # {{{
         sep = Separator(self, b)
         hb.addWidget(sep)
 
-        self.open_icon_folder_button = b = QPushButton(QIcon(I('icon_choose.png')),
+        self.open_icon_folder_button = b = QPushButton(QIcon.ic('icon_choose.png'),
                 _('Open icon folder'), self)
         b.clicked.connect(self.open_icon_folder)
         hb.addWidget(b)
@@ -1224,7 +1277,7 @@ class EditRules(QWidget):  # {{{
 
     def move_rows(self, moving_up=True):
         sm = self.rules_view.selectionModel()
-        rows = sorted(list(sm.selectedRows()), reverse=not moving_up)
+        rows = sorted(sm.selectedRows(), reverse=not moving_up)
         if rows:
             if rows[0].row() == (0 if moving_up else self.model.rowCount() - 1):
                 return
@@ -1265,14 +1318,14 @@ class EditRules(QWidget):  # {{{
             data = json.dumps(rules, indent=2)
             if not isinstance(data, bytes):
                 data = data.encode('utf-8')
-            with lopen(path, 'wb') as f:
+            with open(path, 'wb') as f:
                 f.write(data)
 
     def import_rules(self):
         files = choose_files(self, 'import-coloring-rules', _('Choose file to import from'),
                                 filters=[(_('Rules'), ['rules'])], all_files=False, select_only_single_file=True)
         if files:
-            with lopen(files[0], 'rb') as f:
+            with open(files[0], 'rb') as f:
                 raw = f.read()
             try:
                 rules = json.loads(raw)

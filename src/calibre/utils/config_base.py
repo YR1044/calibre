@@ -4,13 +4,18 @@ __license__   = 'GPL v3'
 __copyright__ = '2011, Kovid Goyal <kovid@kovidgoyal.net>'
 __docformat__ = 'restructuredtext en'
 
-import os, re, traceback, numbers
-from functools import partial
+import numbers
+import os
+import re
+import traceback
 from collections import defaultdict
+from contextlib import suppress
 from copy import deepcopy
+from functools import partial
 
-from calibre.utils.lock import ExclusiveFile
-from calibre.constants import config_dir, CONFIG_DIR_MODE, preferred_encoding, filesystem_encoding, iswindows
+from calibre.constants import CONFIG_DIR_MODE, config_dir, filesystem_encoding, get_umask, iswindows, preferred_encoding
+from calibre.utils.localization import _
+from calibre.utils.resources import get_path as P
 from polyglot.builtins import iteritems
 
 plugin_dir = os.path.join(config_dir, 'plugins')
@@ -22,7 +27,7 @@ def parse_old_style(src):
     try:
         if not isinstance(src, str):
             src = src.decode('utf-8')
-        src = src.replace('PyQt%d.QtCore' % 4, 'PyQt5.QtCore')
+        src = re.sub(r'PyQt(?:4|5).QtCore', r'PyQt6.QtCore', src)
         src = re.sub(r'cPickle\.loads\(([\'"])', r'cPickle.loads(b\1', src)
         exec(src, options)
     except Exception as err:
@@ -50,6 +55,9 @@ def to_json(obj):
     if hasattr(obj, 'toBase64'):  # QByteArray
         return {'__class__': 'bytearray',
                 '__value__': bytes(obj.toBase64()).decode('ascii')}
+    v = getattr(obj, 'value', None)
+    if isinstance(v, int):  # Possibly an enum with integer values like all the Qt enums
+        return v
     raise TypeError(repr(obj) + ' is not JSON serializable')
 
 
@@ -190,7 +198,7 @@ class OptionSet:
 
     def add_group(self, name, description=''):
         if name in self.group_list:
-            raise ValueError('A group by the name %s already exists in this set'%name)
+            raise ValueError(f'A group by the name {name} already exists in this set')
         self.groups[name] = description
         self.group_list.append(name)
         return partial(self.add_opt, group=name)
@@ -242,9 +250,9 @@ class OptionSet:
         pref = Option(name, switches=switches, help=help, type=type, choices=choices,
                  group=group, default=default, action=action, metavar=None)
         if group is not None and group not in self.groups.keys():
-            raise ValueError('Group %s has not been added to this section'%group)
+            raise ValueError(f'Group {group} has not been added to this section')
         if pref in self.preferences:
-            raise ValueError('An option with the name %s already exists in this set.'%name)
+            raise ValueError(f'An option with the name {name} already exists in this set.')
         self.preferences.append(pref)
         self.defaults[name] = default
 
@@ -259,7 +267,7 @@ class OptionSet:
     def option_parser(self, user_defaults=None, usage='', gui_mode=False):
         from calibre.utils.config import OptionParser
         parser = OptionParser(usage, gui_mode=gui_mode)
-        groups = defaultdict(lambda : parser)
+        groups = defaultdict(lambda: parser)
         for group, desc in self.groups.items():
             groups[group] = parser.add_option_group(group.upper(), desc)
 
@@ -344,6 +352,47 @@ class ConfigInterface:
         self.option_set.smart_update(opts1, opts2)
 
 
+def retry_on_fail(func, *args, count=10, sleep_time=0.2):
+    import time
+    ERROR_SHARING_VIOLATION = 32
+    ACCESS_DENIED = 5
+    for i in range(count):
+        try:
+            return func(*args)
+        except FileNotFoundError:
+            raise
+        except OSError as e:
+            # Windows stupidly gives us an ACCESS_DENIED rather than a
+            # ERROR_SHARING_VIOLATION if the file is open
+            if not iswindows or i > count - 2 or e.winerror not in (ERROR_SHARING_VIOLATION, ACCESS_DENIED):
+                raise
+            # Try the operation repeatedly in case something like a virus
+            # scanner has opened one of the files (I love windows)
+            time.sleep(sleep_time)
+
+
+def read_data(file_path):
+    def r():
+        with open(file_path, 'rb') as f:
+            return f.read()
+    return retry_on_fail(r)
+
+
+def commit_data(file_path, data):
+    import tempfile
+    bdir = os.path.dirname(file_path)
+    os.makedirs(bdir, exist_ok=True, mode=CONFIG_DIR_MODE)
+    try:
+        with tempfile.NamedTemporaryFile(dir=bdir, prefix=os.path.basename(file_path).split('.')[0] + '-atomic-', delete=False) as f:
+            if hasattr(os, 'fchmod'):
+                os.fchmod(f.fileno(), 0o666 & ~get_umask())
+            f.write(data)
+        retry_on_fail(os.replace, f.name, file_path)
+    finally:
+        with suppress(FileNotFoundError, NameError):
+            os.remove(f.name)
+
+
 class Config(ConfigInterface):
     '''
     A file based configuration.
@@ -361,13 +410,13 @@ class Config(ConfigInterface):
         src = ''
         migrate = False
         path = self.config_file_path
-        if os.path.exists(path):
-            with ExclusiveFile(path) as f:
-                try:
-                    src = f.read().decode('utf-8')
-                except ValueError:
-                    print("Failed to parse", path)
-                    traceback.print_exc()
+        with suppress(FileNotFoundError):
+            src_bytes = read_data(path)
+            try:
+                src = src_bytes.decode('utf-8')
+            except ValueError:
+                print('Failed to parse', path)
+                traceback.print_exc()
         if not src:
             path = path.rpartition('.')[0]
             from calibre.utils.shared_file import share_open
@@ -381,26 +430,23 @@ class Config(ConfigInterface):
         ans = self.option_set.parse_string(src)
         if migrate:
             new_src = self.option_set.serialize(ans, ignore_unserializable=True)
-            with ExclusiveFile(self.config_file_path) as f:
-                f.seek(0), f.truncate()
-                f.write(new_src)
+            commit_data(self.config_file_path, new_src)
         return ans
 
     def set(self, name, val):
         if not self.option_set.has_option(name):
-            raise ValueError('The option %s is not defined.'%name)
+            raise ValueError(f'The option {name} is not defined.')
         if not os.path.exists(config_dir):
             make_config_dir()
-        with ExclusiveFile(self.config_file_path) as f:
-            src = f.read()
-            opts = self.option_set.parse_string(src)
-            setattr(opts, name, val)
-            src = self.option_set.serialize(opts)
-            f.seek(0)
-            f.truncate()
-            if isinstance(src, str):
-                src = src.encode('utf-8')
-            f.write(src)
+        src = b''
+        with suppress(FileNotFoundError):
+            src = read_data(self.config_file_path)
+        opts = self.option_set.parse_string(src)
+        setattr(opts, name, val)
+        src = self.option_set.serialize(opts)
+        if isinstance(src, str):
+            src = src.encode('utf-8')
+        commit_data(self.config_file_path, src)
 
 
 class StringConfig(ConfigInterface):
@@ -422,7 +468,7 @@ class StringConfig(ConfigInterface):
 
     def set(self, name, val):
         if not self.option_set.has_option(name):
-            raise ValueError('The option %s is not defined.'%name)
+            raise ValueError(f'The option {name} is not defined.')
         opts = self.option_set.parse_string(self.src)
         setattr(opts, name, val)
         self.set_src(self.option_set.serialize(opts))
@@ -548,7 +594,7 @@ def create_global_prefs(conf_obj=None):
                    'can cause problems with text that starts with numbers and is '
                    'a little slower.'))
 
-    c.add_opt('migrated', default=False, help='For Internal use. Don\'t modify.')
+    c.add_opt('migrated', default=False, help="For Internal use. Don't modify.")
     return c
 
 
@@ -557,8 +603,8 @@ if prefs['installation_uuid'] is None:
     import uuid
     prefs['installation_uuid'] = str(uuid.uuid4())
 
-# Read tweaks
 
+# Read tweaks
 
 def tweaks_file():
     return os.path.join(config_dir, 'tweaks.json')

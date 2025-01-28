@@ -9,8 +9,8 @@ __copyright__ = '2011, Anthon van der Neut <A.van.der.Neut@ruamel.eu>'
 # DjVu v3
 # November 2005
 
-import sys
 import struct
+import sys
 
 from calibre.ebooks.djvu.djvubzzdec import BZZDecoder
 
@@ -37,7 +37,7 @@ class DjvuChunk:
         self.dataend = pos + self.size - (8 if inclheader else 0)
         if self.type == b'FORM':
             oldpos, pos = pos, pos+4
-            # print oldpos, pos
+            # print(oldpos, pos)
             self.subtype = buf[oldpos:pos]
             # self.headersize += 4
         self.datastart = pos
@@ -109,7 +109,7 @@ class DJVUFile:
     def __init__(self, instream, verbose=0):
         self.instream = instream
         buf = self.instream.read(4)
-        assert(buf == b'AT&T')
+        assert buf == b'AT&T'
         buf = self.instream.read()
         self.dc = DjvuChunk(buf, 0, len(buf), verbose=verbose)
 

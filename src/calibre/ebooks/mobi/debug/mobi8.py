@@ -5,16 +5,18 @@ __license__   = 'GPL v3'
 __copyright__ = '2012, Kovid Goyal <kovid@kovidgoyal.net>'
 __docformat__ = 'restructuredtext en'
 
-import sys, os, struct, textwrap
+import os
+import struct
+import sys
+import textwrap
 
 from calibre import CurrentDir
+from calibre.ebooks.mobi.debug import format_bytes
 from calibre.ebooks.mobi.debug.containers import ContainerHeader
 from calibre.ebooks.mobi.debug.headers import TextRecord
-from calibre.ebooks.mobi.debug.index import (SKELIndex, SECTIndex, NCXIndex,
-        GuideIndex)
-from calibre.ebooks.mobi.utils import read_font_record, decode_tbs, RECORD_SIZE
-from calibre.ebooks.mobi.debug import format_bytes
+from calibre.ebooks.mobi.debug.index import GuideIndex, NCXIndex, SECTIndex, SKELIndex
 from calibre.ebooks.mobi.reader.headers import NULL_INDEX
+from calibre.ebooks.mobi.utils import RECORD_SIZE, decode_tbs, read_font_record
 from calibre.utils.imghdr import what
 from polyglot.builtins import iteritems, itervalues, print_to_binary_file
 
@@ -32,12 +34,13 @@ class FDST:
         rest = raw[self.sec_off+struct.calcsize(secf):]
         if rest:
             raise ValueError('FDST record has trailing data: '
-                    '%s'%format_bytes(rest))
+                    f'{format_bytes(rest)}')
         self.sections = tuple(zip(secs[::2], secs[1::2]))
 
     def __str__(self):
         ans = ['FDST record']
-        a = lambda k, v:ans.append('%s: %s'%(k, v))
+        def a(k, v):
+            return ans.append(f'{k}: {v}')
         a('Offset to sections', self.sec_off)
         a('Number of section records', self.num_sections)
         ans.append('**** %d Sections ****'% len(self.sections))
@@ -179,7 +182,7 @@ class MOBIFile:
             if sig == b'FONT':
                 font = read_font_record(rec.raw)
                 if font['err']:
-                    raise ValueError('Failed to read font record: %s Headers: %s'%(
+                    raise ValueError('Failed to read font record: {} Headers: {}'.format(
                         font['err'], font['headers']))
                 payload = (font['font_data'] if font['font_data'] else
                         font['raw_data'])
@@ -222,9 +225,15 @@ class MOBIFile:
                 payload))
 
     def read_tbs(self):
-        from calibre.ebooks.mobi.writer8.tbs import (Entry, DOC,
-                collect_indexing_data, encode_strands_as_sequences,
-                sequences_to_bytes, calculate_all_tbs, NegativeStrandIndex)
+        from calibre.ebooks.mobi.writer8.tbs import (
+            DOC,
+            Entry,
+            NegativeStrandIndex,
+            calculate_all_tbs,
+            collect_indexing_data,
+            encode_strands_as_sequences,
+            sequences_to_bytes,
+        )
         entry_map = []
         for index in self.ncx_index:
             vals = list(index)[:-1] + [None, None, None, None]
@@ -277,7 +286,7 @@ class MOBIFile:
             for j, seq in enumerate(sequences):
                 desc.append('Sequence #%d: %r %r'%(j, seq[0], seq[1]))
             if tbs_bytes:
-                desc.append('Remaining bytes: %s'%format_bytes(tbs_bytes))
+                desc.append(f'Remaining bytes: {format_bytes(tbs_bytes)}')
             calculated_sequences = encode_strands_as_sequences(strands,
                     tbs_type=tbs_type)
             try:
@@ -287,7 +296,7 @@ class MOBIFile:
             if calculated_bytes != otbs:
                 print('WARNING: TBS mismatch for record %d'%i)
                 desc.append('WARNING: TBS mismatch!')
-                desc.append('Calculated sequences: %r'%calculated_sequences)
+                desc.append(f'Calculated sequences: {calculated_sequences!r}')
             desc.append('')
             self.indexing_data.append('\n'.join(desc))
 

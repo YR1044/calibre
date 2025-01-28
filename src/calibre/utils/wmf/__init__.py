@@ -17,7 +17,6 @@ class NoRaster(Exception):
 
 
 class DIBHeader:
-
     '''
     See http://en.wikipedia.org/wiki/BMP_file_format
     '''
@@ -60,7 +59,7 @@ def create_bmp_from_dib(raw):
 
 
 def to_png(bmp):
-    from qt.core import QImage, QByteArray, QBuffer, QIODevice
+    from qt.core import QBuffer, QByteArray, QImage, QIODevice
     i = QImage()
     if not i.loadFromData(bmp):
         raise ValueError('Invalid image data')
