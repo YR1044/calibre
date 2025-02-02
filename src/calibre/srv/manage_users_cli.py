@@ -5,8 +5,9 @@ import sys
 from functools import partial
 
 from calibre import prints
-from calibre.constants import preferred_encoding, iswindows
+from calibre.constants import iswindows, preferred_encoding
 from calibre.utils.config import OptionParser
+from calibre.utils.localization import _, ngettext
 from polyglot.builtins import iteritems
 
 
@@ -212,13 +213,12 @@ def manage_users_cli(path=None, args=()):
         question=_('What do you want to do?'), choices=(), default=None, banner=''):
         prints(banner)
         for i, choice in enumerate(choices):
-            prints('%d)' % (i + 1), choice)
+            prints(f'{i + 1})', choice)
         print()
         while True:
-            prompt = question + ' [1-%d]:' % len(choices)
+            prompt = question + f' [1-{len(choices)}]:'
             if default is not None:
-                prompt = question + ' [1-%d %s: %d]' % (
-                    len(choices), _('default'), default + 1)
+                prompt = question + f" [1-{len(choices)} {_('default')}: {default + 1}]"
             reply = get_input(prompt)
             if not reply and default is not None:
                 reply = str(default + 1)

@@ -9,49 +9,66 @@ import textwrap
 import unicodedata
 from collections import OrderedDict
 from math import ceil
+
 from qt.core import (
-    QAbstractListModel, QApplication, QCheckBox, QComboBox, QCursor, QDialog,
-    QDialogButtonBox, QEvent, QFormLayout, QFrame, QGridLayout, QGroupBox,
-    QHBoxLayout, QIcon, QItemSelectionModel, QLabel, QLineEdit, QListView, QMimeData,
-    QModelIndex, QPainter, QPalette, QPixmap, QPlainTextEdit, QPoint, QRect, QSize,
-    QSizePolicy, QSplitter, QStaticText, QStyle, QStyledItemDelegate, Qt,
-    QTextDocument, QTextOption, QToolButton, QVBoxLayout, QWidget, pyqtSignal
+    QAbstractListModel,
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QEvent,
+    QFormLayout,
+    QFrame,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QIcon,
+    QItemSelectionModel,
+    QLabel,
+    QLineEdit,
+    QListView,
+    QMimeData,
+    QModelIndex,
+    QPainter,
+    QPalette,
+    QPixmap,
+    QPlainTextEdit,
+    QPoint,
+    QRect,
+    QSize,
+    QSizePolicy,
+    QSplitter,
+    QStaticText,
+    QStyle,
+    QStyledItemDelegate,
+    Qt,
+    QTextCursor,
+    QTextDocument,
+    QTextOption,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
+    pyqtSignal,
 )
 
 from calibre import human_readable, prepare_string_for_xml
 from calibre.constants import iswindows
 from calibre.ebooks.oeb.polish.cover import get_raster_cover_name
-from calibre.ebooks.oeb.polish.toc import (
-    ensure_container_has_nav, get_guide_landmarks, get_nav_landmarks, set_landmarks
-)
+from calibre.ebooks.oeb.polish.toc import ensure_container_has_nav, get_guide_landmarks, get_nav_landmarks, set_landmarks
 from calibre.ebooks.oeb.polish.upgrade import guide_epubtype_map
 from calibre.ebooks.oeb.polish.utils import guess_type, lead_text
-from calibre.gui2 import (
-    choose_files, choose_images, choose_save_file, error_dialog, info_dialog
-)
+from calibre.gui2 import choose_files, choose_images, choose_save_file, error_dialog, info_dialog
 from calibre.gui2.complete2 import EditWithComplete
 from calibre.gui2.tweak_book import current_container, tprefs
-from calibre.gui2.widgets2 import (
-    PARAGRAPH_SEPARATOR, Dialog as BaseDialog, HistoryComboBox, to_plain_text
-)
-from calibre.utils.icu import (
-    numeric_sort_key, primary_contains, primary_sort_key, sort_key
-)
-from calibre.utils.matcher import (
-    DEFAULT_LEVEL1, DEFAULT_LEVEL2, DEFAULT_LEVEL3, Matcher, get_char
-)
+from calibre.gui2.widgets2 import PARAGRAPH_SEPARATOR, HistoryComboBox, to_plain_text
+from calibre.gui2.widgets2 import Dialog as BaseDialog
+from calibre.startup import connect_lambda
+from calibre.utils.icu import numeric_sort_key, primary_contains, primary_sort_key, sort_key
+from calibre.utils.matcher import DEFAULT_LEVEL1, DEFAULT_LEVEL2, DEFAULT_LEVEL3, Matcher, get_char
 from polyglot.builtins import iteritems
 
 ROOT = QModelIndex()
-
-
-class BusyCursor:
-
-    def __enter__(self):
-        QApplication.setOverrideCursor(QCursor(Qt.CursorShape.WaitCursor))
-
-    def __exit__(self, *args):
-        QApplication.restoreOverrideCursor()
 
 
 class Dialog(BaseDialog):
@@ -123,9 +140,9 @@ class RationalizeFolders(Dialog):  # {{{
         folders = tprefs['folders_for_types']
         for i, (typ, text) in enumerate(self.TYPE_MAP):
             la = QLabel('&' + text)
-            setattr(self, '%s_label' % typ, la)
+            setattr(self, f'{typ}_label', la)
             le = QLineEdit(self)
-            setattr(self, '%s_folder' % typ, le)
+            setattr(self, f'{typ}_folder', le)
             val = folders.get(typ, '')
             if val and not val.endswith('/'):
                 val += '/'
@@ -144,7 +161,7 @@ class RationalizeFolders(Dialog):  # {{{
     def folder_map(self):
         ans = {}
         for typ, x in self.TYPE_MAP:
-            val = str(getattr(self, '%s_folder' % typ).text()).strip().strip('/')
+            val = str(getattr(self, f'{typ}_folder').text()).strip().strip('/')
             ans[typ] = val
         return ans
 
@@ -216,7 +233,7 @@ class ImportForeign(Dialog):  # {{{
         src.setPlaceholderText(_('Choose the file to import'))
         h1.addWidget(src)
         self.b1 = b = QToolButton(self)
-        b.setIcon(QIcon(I('document_open.png')))
+        b.setIcon(QIcon.ic('document_open.png'))
         b.setText(_('Choose file'))
         h1.addWidget(b)
         l.addRow(_('Source file:'), h1)
@@ -228,7 +245,7 @@ class ImportForeign(Dialog):  # {{{
         src.setPlaceholderText(_('Choose the location for the newly created EPUB'))
         h1.addWidget(src)
         self.b2 = b = QToolButton(self)
-        b.setIcon(QIcon(I('document_open.png')))
+        b.setIcon(QIcon.ic('document_open.png'))
         b.setText(_('Choose file'))
         h1.addWidget(b)
         l.addRow(_('Destination file:'), h1)
@@ -270,8 +287,8 @@ class ImportForeign(Dialog):  # {{{
         return src, dest
 # }}}
 
-# Quick Open {{{
 
+# Quick Open {{{
 
 def make_highlighted_text(emph, text, positions):
     positions = sorted(set(positions) - {-1})
@@ -359,7 +376,7 @@ class Results(QWidget):
     def __call__(self, results):
         if results:
             self.current_result = 0
-            prefixes = [QStaticText('<b>%s</b>' % os.path.basename(x)) for x in results]
+            prefixes = [QStaticText(f'<b>{os.path.basename(x)}</b>') for x in results]
             [(p.setTextFormat(Qt.TextFormat.RichText), p.setTextOption(self.text_option)) for p in prefixes]
             self.maxwidth = max(int(ceil(x.size().width())) for x in prefixes)
             self.results = tuple((prefix, self.make_text(text, positions), text)
@@ -440,8 +457,8 @@ class QuickOpen(Dialog):
 
     def default_help_text(self):
         example = '<pre>{0}i{1}mages/{0}c{1}hapter1/{0}s{1}cene{0}3{1}.jpg</pre>'.format(
-            '<span style="%s">' % emphasis_style(), '</span>')
-        chars = '<pre style="%s">ics3</pre>' % emphasis_style()
+            f'<span style="{emphasis_style()}">', '</span>')
+        chars = f'<pre style="{emphasis_style()}">ics3</pre>'
 
         return _('''<p>Quickly choose a file by typing in just a few characters from the file name into the field above.
         For example, if want to choose the file:
@@ -492,15 +509,15 @@ class QuickOpen(Dialog):
     @classmethod
     def test(cls):
         from calibre.utils.matcher import get_items_from_dir
-        items = get_items_from_dir(os.getcwd(), lambda x:not x.endswith('.pyc'))
+        items = get_items_from_dir(os.getcwd(), lambda x: not x.endswith('.pyc'))
         d = cls(items)
         d.exec()
         print(d.selected_result)
 
 # }}}
 
-# Filterable names list {{{
 
+# Filterable names list {{{
 
 class NamesDelegate(QStyledItemDelegate):
 
@@ -528,10 +545,10 @@ class NamesDelegate(QStyledItemDelegate):
             to.setWrapMode(QTextOption.WrapMode.NoWrap)
             to.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             positions = sorted(set(positions) - {-1}, reverse=True)
-            text = '<body>%s</body>' % make_highlighted_text(emphasis_style(), text, positions)
+            text = f'<body>{make_highlighted_text(emphasis_style(), text, positions)}</body>'
             doc = QTextDocument()
-            c = 'rgb(%d, %d, %d)'%c.getRgb()[:3]
-            doc.setDefaultStyleSheet(' body { color: %s }'%c)
+            c = 'rgb({}, {}, {})'.format(*c.getRgb()[:3])
+            doc.setDefaultStyleSheet(f' body {{ color: {c} }}')
             doc.setHtml(text)
             doc.setDefaultFont(option.font)
             doc.setDocumentMargin(0.0)
@@ -602,8 +619,8 @@ def create_filterable_names_list(names, filter_text=None, parent=None, model=Nam
 
 # }}}
 
-# Insert Link {{{
 
+# Insert Link {{{
 
 class AnchorsModel(QAbstractListModel):
 
@@ -733,9 +750,9 @@ class InsertLink(Dialog):
                 frag = item.get('id', None) or item.get('name')
                 if not frag:
                     continue
-                text = lead_text(item, num_words=4)
+                text = lead_text(item, num_words=4).strip()
                 ac.append((text, frag))
-            ac.sort(key=lambda text_frag: numeric_sort_key(text_frag[0]))
+            ac.sort(key=lambda text_frag: numeric_sort_key(text_frag[0] or text_frag[1]))
         self.anchor_names.model().set_names(self.anchor_cache[name])
         self.update_target()
 
@@ -797,10 +814,8 @@ class InsertLink(Dialog):
 
 # }}}
 
-# Insert Semantics {{{
 
-
-class InsertSemantics(Dialog):
+class InsertSemantics(Dialog):  # {{{
 
     def __init__(self, container, parent=None):
         self.container = container
@@ -815,7 +830,8 @@ class InsertSemantics(Dialog):
         return QSize(800, 600)
 
     def create_known_type_map(self):
-        _ = lambda x: x
+        def _(x):
+            return x
         self.epubtype_guide_map = {v: k for k, v in guide_epubtype_map.items()}
         self.known_type_map = {
             'titlepage': _('Title page'),
@@ -995,7 +1011,12 @@ class InsertSemantics(Dialog):
             return title
 
         for item_type, (name, frag) in self.changes.items():
-            set_guide_item(container, self.epubtype_guide_map[item_type], title_for_type(item_type), name, frag=frag)
+            guide_type = self.epubtype_guide_map.get(item_type)
+            if not guide_type:
+                if container.opf_version_parsed.major < 3:
+                    raise KeyError(_('Cannot set {} type semantics in EPUB 2 or AZW3 books').format(name))
+                continue
+            set_guide_item(container, guide_type, title_for_type(item_type), name, frag=frag)
 
         if container.opf_version_parsed.major > 2:
             final = self.original_nav_map.copy()
@@ -1089,8 +1110,8 @@ class FilterCSS(Dialog):  # {{{
 
 # }}}
 
-# Add Cover {{{
 
+# Add Cover {{{
 
 class CoverView(QWidget):
 
@@ -1175,7 +1196,7 @@ class AddCover(Dialog):
         p.setVisible(self.container.book_type != 'azw3')
 
         def on_state_change(s):
-            tprefs.set('add_cover_preserve_aspect_ratio', s == Qt.CheckState.Checked)
+            tprefs.set('add_cover_preserve_aspect_ratio', Qt.CheckState(s) == Qt.CheckState.Checked)
 
         p.stateChanged.connect(on_state_change)
         self.info_label = il = QLabel('\xa0')
@@ -1185,7 +1206,7 @@ class AddCover(Dialog):
         l.addWidget(self.bb)
         b = self.bb.addButton(_('Import &image'), QDialogButtonBox.ButtonRole.ActionRole)
         b.clicked.connect(self.import_image)
-        b.setIcon(QIcon(I('document_open.png')))
+        b.setIcon(QIcon.ic('document_open.png'))
         self.names.setFocus(Qt.FocusReason.OtherFocusReason)
         self.names.selectionModel().currentChanged.connect(self.current_image_changed)
         cname = get_raster_cover_name(self.container)
@@ -1207,8 +1228,7 @@ class AddCover(Dialog):
         if name is not None:
             data = self.container.raw_data(name, decode=False)
             self.cover_view.set_pixmap(data)
-            self.info_label.setText('{}x{}px | {}'.format(
-                self.cover_view.pixmap.width(), self.cover_view.pixmap.height(), human_readable(len(data))))
+            self.info_label.setText(f'{self.cover_view.pixmap.width()}x{self.cover_view.pixmap.height()}px | {human_readable(len(data))}')
 
     def import_image(self):
         ans = choose_images(self, 'add-cover-choose-image', _('Choose a cover image'), formats=(
@@ -1286,6 +1306,31 @@ class PlainTextEdit(QPlainTextEdit):  # {{{
             if ret:
                 return True
         return QPlainTextEdit.event(self, ev)
+
+    def mouseDoubleClickEvent(self, ev):
+        super().mouseDoubleClickEvent(ev)
+        c = self.textCursor()
+        # Workaround for QTextCursor considering smart quotes as word
+        # characters https://bugreports.qt.io/browse/QTBUG-101372
+        changed = False
+        while True:
+            q = c.selectedText()
+            if not q:
+                break
+            left = min(c.anchor(), c.position())
+            right = max(c.anchor(), c.position())
+            if q[0] in '“‘':
+                changed = True
+                c.setPosition(left + 1)
+                c.setPosition(right, QTextCursor.MoveMode.KeepAnchor)
+            elif q[-1] in '’”':
+                changed = True
+                c.setPosition(left)
+                c.setPosition(right - 1, QTextCursor.MoveMode.KeepAnchor)
+            else:
+                break
+        if changed:
+            self.setTextCursor(c)
 
 # }}}
 

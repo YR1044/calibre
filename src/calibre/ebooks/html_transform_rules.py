@@ -4,13 +4,14 @@
 
 import re
 from functools import partial
+
+from css_selectors.select import Select, get_parsed_selector
 from html5_parser import parse
 from lxml import etree
 
-from calibre.ebooks.oeb.parse_utils import XHTML
-from calibre.ebooks.oeb.base import OEB_DOCS, XPath
 from calibre.ebooks.metadata.tag_mapper import uniq
-from css_selectors.select import Select, get_parsed_selector
+from calibre.ebooks.oeb.base import OEB_DOCS, XPath
+from calibre.ebooks.oeb.parse_utils import XHTML
 
 
 def non_empty_validator(label, val):
@@ -243,7 +244,10 @@ def empty(tag):
 
 
 def parse_start_tag(text):
-    tag = parse(text, namespace_elements=True, fragment_context='div')[0]
+    try:
+        tag = parse(text, namespace_elements=True, fragment_context='div')[0]
+    except IndexError as e:
+        raise ValueError(_('No tag found in: {}. The tag specification must be of the form <tag> for example: <p>')) from e
     return {'tag': tag.tag, 'attrib': tag.items()}
 
 
@@ -376,7 +380,7 @@ class Rule:
             self.css_selector = '.' + q
             self.selector = self.css
         elif mt == 'not_has_class':
-            self.css_selector = f":not(.{q})"
+            self.css_selector = f':not(.{q})'
             self.selector = self.css
         elif mt == 'contains_text':
             self.xpath_selector = XPath(f'//*[contains(text(), {text_as_xpath_literal(q)})]')
@@ -623,7 +627,7 @@ def test(return_tests=False):  # {{{
             self.assertTrue(t('add_attrs', "class='c' data-m=n")(p))
             self.ae(p.items(), [('class', 'c'), ('data-m', 'n')])
             p = r('<p a=1>')[0]
-            self.assertTrue(t('add_attrs', "a=2")(p))
+            self.assertTrue(t('add_attrs', 'a=2')(p))
             self.ae(p.items(), [('a', '2')])
 
             p = r('<p>t<span>s')[0]

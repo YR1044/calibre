@@ -7,9 +7,9 @@ Device driver for the Netronix EB600
 
 Windows PNP strings:
  ('USBSTOR\\DISK&VEN_NETRONIX&PROD_EBOOK&REV_062E\\6&1A275569&0&EB6001009
-2W00000&0', 2, u'F:\\')
+2W00000&0', 2, 'F:\\')
         ('USBSTOR\\DISK&VEN_NETRONIX&PROD_EBOOK&REV_062E\\6&1A275569&0&EB6001009
-2W00000&1', 3, u'G:\\')
+2W00000&1', 3, 'G:\\')
 
 '''
 import re
@@ -71,7 +71,7 @@ class TOLINO(EB600):
     EXTRA_CUSTOMIZATION_MESSAGE = [
         _('Swap main and card A') +
         ':::' +
-        _('Check this box if the device\'s main memory is being seen as card a and the card '
+        _("Check this box if the device's main memory is being seen as card a and the card "
             'is being seen as main memory. Some tolino devices may need this option.'),
     ]
 
@@ -184,7 +184,7 @@ class SHINEBOOK(EB600):
 class POCKETBOOK360(EB600):
 
     # Device info on OS X
-    # (8069L, 5768L, 272L, u'', u'', u'1.00')
+    # (8069L, 5768L, 272L,'', '', '1.00')
 
     name = 'PocketBook 360 Device Interface'
 
@@ -196,10 +196,10 @@ class POCKETBOOK360(EB600):
     FORMATS = ['epub', 'fb2', 'prc', 'mobi', 'pdf', 'djvu', 'rtf', 'chm', 'txt']
 
     VENDOR_NAME = ['PHILIPS', '__POCKET', 'POCKETBO']
-    WINDOWS_MAIN_MEM = WINDOWS_CARD_A_MEM = ['MASS_STORGE', 'BOOK_USB_STORAGE',
+    WINDOWS_MAIN_MEM = WINDOWS_CARD_A_MEM = ['MASS_STORAGE', 'BOOK_USB_STORAGE',
             'OK_POCKET_611_61', 'OK_POCKET_360+61']
 
-    OSX_MAIN_MEM = OSX_CARD_A_MEM = 'Philips Mass Storge Media'
+    OSX_MAIN_MEM = OSX_CARD_A_MEM = 'Philips Mass Storage Media'
     OSX_MAIN_MEM_VOL_PAT = re.compile(r'/Pocket')
 
     @classmethod
@@ -236,7 +236,7 @@ class ITALICA(EB600):
 
     name = 'Italica Device Interface'
     gui_name = 'Italica'
-    icon = I('devices/italica.png')
+    icon = 'devices/italica.png'
 
     FORMATS = ['epub', 'rtf', 'fb2', 'html', 'prc', 'mobi', 'pdf', 'txt']
 
@@ -427,7 +427,7 @@ class POCKETBOOK701(USBMS):
 
 class POCKETBOOK740(USBMS):
 
-    name = 'PocketBook 701 Device Interface'
+    name = 'PocketBook 740 Device Interface'
     gui_name = 'PocketBook'
     description = _('Communicate with the PocketBook 740')
     supported_platforms = ['windows', 'osx', 'linux']

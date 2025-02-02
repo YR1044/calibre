@@ -4,15 +4,18 @@
 __license__ = 'GPL v3'
 __copyright__ = '2015, Kovid Goyal <kovid at kovidgoyal.net>'
 
-import errno, os, numbers
-from collections import namedtuple, OrderedDict
-from operator import attrgetter
+import errno
+import numbers
+import os
+from collections import OrderedDict, namedtuple
 from functools import partial
+from itertools import zip_longest
+from operator import attrgetter
 
 from calibre.constants import config_dir
+from calibre.utils.localization import _
 from calibre.utils.lock import ExclusiveFile
 from polyglot.builtins import itervalues
-from itertools import zip_longest
 
 Option = namedtuple('Option', 'name default longdoc shortdoc choices')
 
@@ -40,7 +43,7 @@ raw_options = (
     None,
 
     _('Time (in seconds) to wait for a response from the server when making queries'),
-    'ajax_timeout',  60.0,
+    'ajax_timeout', 60.0,
     None,
 
     _('Total time in seconds to wait for clean shutdown'),
@@ -107,10 +110,10 @@ raw_options = (
     ' there are more than this number of items. Set to zero to disable.'),
 
     _('The interface on which to listen for connections'),
-    'listen_on', '0.0.0.0',
-    _('The default is to listen on all available IPv4 interfaces. You can change this to, for'
-    ' example, "127.0.0.1" to only listen for connections from the local machine, or'
-    ' to "::" to listen to all incoming IPv6 and IPv4 connections.'),
+    'listen_on', None,
+    _('The default is to listen on all available IPv6 and IPv4 interfaces. You can change this to, for'
+    ' example, "127.0.0.1" to only listen for IPv4 connections from the local machine, or'
+    ' to "0.0.0.0" to listen to all incoming IPv4 connections.'),
 
     _('Fallback to auto-detected interface'),
     'fallback_to_detected_interface', True,
@@ -250,7 +253,7 @@ def boolean_option(add_option, opt):
 
 def opts_to_parser(usage):
     from calibre.utils.config import OptionParser
-    parser =  OptionParser(usage)
+    parser = OptionParser(usage)
     for opt in itervalues(options):
         add_option = partial(parser.add_option, dest=opt.name, help=opt_to_cli_help(opt), default=opt.default)
         if opt.default is True or opt.default is False:

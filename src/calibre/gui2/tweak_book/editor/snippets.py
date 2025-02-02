@@ -10,10 +10,28 @@ import weakref
 from collections import OrderedDict, namedtuple
 from itertools import groupby
 from operator import attrgetter, itemgetter
+
 from qt.core import (
-    QDialog, QDialogButtonBox, QFrame, QGridLayout, QHBoxLayout, QIcon, QLabel,
-    QLineEdit, QListView, QListWidget, QListWidgetItem, QObject, QPushButton, QSize,
-    QStackedLayout, Qt, QTextCursor, QToolButton, QVBoxLayout, QWidget
+    QDialog,
+    QDialogButtonBox,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QIcon,
+    QLabel,
+    QLineEdit,
+    QListView,
+    QListWidget,
+    QListWidgetItem,
+    QObject,
+    QPushButton,
+    QSize,
+    QStackedLayout,
+    Qt,
+    QTextCursor,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
 )
 
 from calibre.constants import ismacos
@@ -26,7 +44,11 @@ from calibre.utils.icu import string_length as strlen
 from calibre.utils.localization import localize_user_manual_link
 from polyglot.builtins import codepoint_to_chr, iteritems, itervalues
 
-string_length = lambda x: strlen(str(x))  # Needed on narrow python builds, as subclasses of unicode dont work
+
+def string_length(x):
+    return strlen(str(x))  # Needed on narrow python builds, as subclasses of unicode dont work
+
+
 KEY = Qt.Key.Key_J
 MODIFIER = Qt.KeyboardModifier.MetaModifier if ismacos else Qt.KeyboardModifier.ControlModifier
 
@@ -88,6 +110,7 @@ obtain some advantage from it? But.</p>
 
 }  # }}}
 
+
 # Parsing of snippets {{{
 escape = unescape = None
 
@@ -97,10 +120,12 @@ def escape_funcs():
     if escape is None:
         escapem = {('\\' + x):codepoint_to_chr(i+1) for i, x in enumerate('\\${}')}
         escape_pat = re.compile('|'.join(map(re.escape, escapem)))
-        escape = lambda x: escape_pat.sub(lambda m: escapem[m.group()], x.replace(r'\\', '\x01'))
+        def escape(x):
+            return escape_pat.sub(lambda m: escapem[m.group()], x.replace('\\\\', '\x01'))
         unescapem = {v:k[1] for k, v in iteritems(escapem)}
         unescape_pat = re.compile('|'.join(unescapem))
-        unescape = lambda x:unescape_pat.sub(lambda m:unescapem[m.group()], x)
+        def unescape(x):
+            return unescape_pat.sub(lambda m: unescapem[m.group()], x)
     return escape, unescape
 
 
@@ -134,8 +159,9 @@ class TabStop(str):
         return self
 
     def __repr__(self):
-        return 'TabStop(text=%s num=%d start=%d is_mirror=%s takes_selection=%s is_toplevel=%s)' % (
-            str.__repr__(self), self.num, self.start, self.is_mirror, self.takes_selection, self.is_toplevel)
+        return (
+            f'TabStop(text={str.__repr__(self)} num={self.num} start={self.start} is_mirror={self.is_mirror}'
+            f' takes_selection={self.takes_selection} is_toplevel={self.is_toplevel})')
 
 
 def parse_template(template, start_offset=0, is_toplevel=True, grouped=True):
@@ -177,11 +203,11 @@ def snippets(refresh=False):
             if snip['trigger'] and isinstance(snip['trigger'], str):
                 key = snip_key(snip['trigger'], *snip['syntaxes'])
                 _snippets[key] = {'template':snip['template'], 'description':snip['description']}
-        _snippets = sorted(iteritems(_snippets), key=(lambda key_snip:string_length(key_snip[0].trigger)), reverse=True)
+        _snippets = sorted(iteritems(_snippets), key=(lambda key_snip: string_length(key_snip[0].trigger)), reverse=True)
     return _snippets
 
-# Editor integration {{{
 
+# Editor integration {{{
 
 class EditorTabStop:
 
@@ -209,8 +235,9 @@ class EditorTabStop:
         self.join_previous_edit = False
 
     def __repr__(self):
-        return 'EditorTabStop(num={!r} text={!r} left={!r} right={!r} is_deleted={!r} mirrors={!r})'.format(
-            self.num, self.text, self.left, self.right, self.is_deleted, self.mirrors)
+        return (
+            f'EditorTabStop(num={self.num!r} text={self.text!r} left={self.left!r} right={self.right!r} '
+            f'is_deleted={self.is_deleted!r} mirrors={self.mirrors!r})')
     __str__ = __unicode__ = __repr__
 
     def apply_selected_text(self, text):
@@ -435,8 +462,8 @@ class SnippetManager(QObject):
         return False
 # }}}
 
-# Config {{{
 
+# Config {{{
 
 class SnippetTextEdit(PlainTextEdit):
 
@@ -567,10 +594,10 @@ class UserSnippets(Dialog):
 
     def __init__(self, parent=None):
         Dialog.__init__(self, _('Create/edit snippets'), 'snippet-editor', parent=parent)
-        self.setWindowIcon(QIcon(I('snippets.png')))
+        self.setWindowIcon(QIcon.ic('snippets.png'))
 
     def setup_ui(self):
-        self.setWindowIcon(QIcon(I('modified.png')))
+        self.setWindowIcon(QIcon.ic('modified.png'))
         self.l = l = QVBoxLayout(self)
         self.stack = s = QStackedLayout()
         l.addLayout(s), l.addWidget(self.bb)
@@ -596,22 +623,22 @@ class UserSnippets(Dialog):
         c.l2 = l = QVBoxLayout()
         h.addLayout(l)
         self.add_button = b = QToolButton(self)
-        b.setIcon(QIcon(I('plus.png'))), b.setText(_('&Add snippet')), b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+        b.setIcon(QIcon.ic('plus.png')), b.setText(_('&Add snippet')), b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
         b.clicked.connect(self.add_snippet)
         l.addWidget(b)
 
         self.edit_button = b = QToolButton(self)
-        b.setIcon(QIcon(I('modified.png'))), b.setText(_('&Edit snippet')), b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+        b.setIcon(QIcon.ic('modified.png')), b.setText(_('&Edit snippet')), b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
         b.clicked.connect(self.edit_snippet)
         l.addWidget(b)
 
         self.add_button = b = QToolButton(self)
-        b.setIcon(QIcon(I('minus.png'))), b.setText(_('&Remove snippet')), b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+        b.setIcon(QIcon.ic('minus.png')), b.setText(_('&Remove snippet')), b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
         b.clicked.connect(self.remove_snippet)
         l.addWidget(b)
 
         self.add_button = b = QToolButton(self)
-        b.setIcon(QIcon(I('config.png'))), b.setText(_('Change &built-in')), b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+        b.setIcon(QIcon.ic('config.png')), b.setText(_('Change &built-in')), b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
         b.clicked.connect(self.change_builtin)
         l.addWidget(b)
 

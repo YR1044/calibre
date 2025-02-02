@@ -4,38 +4,71 @@
 __license__ = 'GPL v3'
 __copyright__ = '2015, Kovid Goyal <kovid at kovidgoyal.net>'
 
-import time, textwrap, os
-from threading import Thread
-from contextlib import suppress
-from operator import itemgetter
-from functools import partial, lru_cache
+import os
+import textwrap
+import time
 from collections import defaultdict
+from contextlib import suppress
 from csv import writer as csv_writer
+from functools import lru_cache, partial
 from io import StringIO
+from operator import itemgetter
+from threading import Thread
 
 import regex
 from qt.core import (
-    QSize, QStackedLayout, QLabel, QVBoxLayout, Qt, QWidget, pyqtSignal,
-    QAbstractTableModel, QTableView, QSortFilterProxyModel, QIcon, QListWidget,
-    QListWidgetItem, QLineEdit, QStackedWidget, QSplitter, QByteArray, QPixmap,
-    QStyledItemDelegate, QModelIndex, QRect, QStyle, QPalette, QTimer, QMenu,
-    QAbstractItemModel, QTreeView, QFont, QRadioButton, QHBoxLayout,
-    QFontDatabase, QComboBox, QUrl, QAbstractItemView, QDialogButtonBox, QTextCursor)
+    QAbstractItemModel,
+    QAbstractItemView,
+    QAbstractTableModel,
+    QApplication,
+    QByteArray,
+    QComboBox,
+    QDialogButtonBox,
+    QFont,
+    QFontDatabase,
+    QHBoxLayout,
+    QIcon,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QMenu,
+    QModelIndex,
+    QPalette,
+    QPixmap,
+    QRadioButton,
+    QRect,
+    QSize,
+    QSortFilterProxyModel,
+    QSplitter,
+    QStackedLayout,
+    QStackedWidget,
+    QStyle,
+    QStyledItemDelegate,
+    Qt,
+    QTableView,
+    QTextCursor,
+    QTimer,
+    QTreeView,
+    QUrl,
+    QVBoxLayout,
+    QWidget,
+    pyqtSignal,
+)
 
-from calibre import human_readable, fit_image
+from calibre import fit_image, human_readable
 from calibre.constants import DEBUG
-from calibre.ebooks.oeb.polish.report import (
-    gather_data, CSSEntry, CSSFileMatch, MatchLocation, ClassEntry,
-    ClassFileMatch, ClassElement, CSSRule, LinkLocation)
-from calibre.gui2 import error_dialog, question_dialog, choose_save_file, open_url
-from calibre.gui2.webengine import secure_webengine, RestartingWebEngineView
-from calibre.gui2.tweak_book import current_container, tprefs, dictionaries
-from calibre.gui2.tweak_book.widgets import Dialog
+from calibre.ebooks.oeb.polish.report import ClassElement, ClassEntry, ClassFileMatch, CSSEntry, CSSFileMatch, CSSRule, LinkLocation, MatchLocation, gather_data
+from calibre.gui2 import choose_save_file, error_dialog, open_url, question_dialog
 from calibre.gui2.progress_indicator import ProgressIndicator
-from calibre.utils.icu import primary_contains, numeric_sort_key
+from calibre.gui2.tweak_book import current_container, dictionaries, tprefs
+from calibre.gui2.tweak_book.widgets import Dialog
+from calibre.gui2.webengine import RestartingWebEngineView
+from calibre.utils.icu import numeric_sort_key, primary_contains
+from calibre.utils.localization import calibre_langcode_to_name, canonicalize_lang, ngettext
 from calibre.utils.unicode_names import character_name_from_code
-from calibre.utils.localization import calibre_langcode_to_name, canonicalize_lang
-from polyglot.builtins import iteritems, as_bytes
+from calibre.utils.webengine import secure_webengine
+from polyglot.builtins import as_bytes, iteritems
 
 # Utils {{{
 
@@ -114,7 +147,7 @@ class FileCollection(QAbstractTableModel):
                     return self.COLUMN_HEADERS[section]
             elif role == Qt.ItemDataRole.TextAlignmentRole:
                 with suppress(IndexError):
-                    return self.alignments[section]
+                    return int(self.alignments[section])  # https://bugreports.qt.io/browse/PYSIDE-1974
         return QAbstractTableModel.headerData(self, section, orientation, role)
 
     def location(self, index):
@@ -133,6 +166,7 @@ class FilesView(QTableView):
 
     def __init__(self, model, parent=None):
         QTableView.__init__(self, parent)
+        self.setProperty('highlight_current_item', 150)
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.setAlternatingRowColors(True)
@@ -226,13 +260,13 @@ class FilesView(QTableView):
 
 # }}}
 
-# Files {{{
 
+# Files {{{
 
 class FilesModel(FileCollection):
 
-    COLUMN_HEADERS = (_('Folder'), _('Name'), _('Size (KB)'), _('Type'))
-    alignments = Qt.AlignmentFlag.AlignLeft, Qt.AlignmentFlag.AlignLeft, Qt.AlignmentFlag.AlignRight, Qt.AlignmentFlag.AlignLeft
+    COLUMN_HEADERS = (ngettext('Folder', 'Folders', 1), _('Name'), _('Size (KB)'), _('Type'), _('Word count'))
+    alignments = Qt.AlignmentFlag.AlignLeft, Qt.AlignmentFlag.AlignLeft, Qt.AlignmentFlag.AlignRight, Qt.AlignmentFlag.AlignLeft, Qt.AlignmentFlag.AlignRight
     CATEGORY_NAMES = {
         'image':_('Image'),
         'text': _('Text'),
@@ -252,7 +286,7 @@ class FilesModel(FileCollection):
         self.total_size = sum(map(itemgetter(3), self.files))
         self.images_size = sum(map(itemgetter(3), (f for f in self.files if f.category == 'image')))
         self.fonts_size = sum(map(itemgetter(3), (f for f in self.files if f.category == 'font')))
-        self.sort_keys = tuple((psk(entry.dir), psk(entry.basename), entry.size, psk(self.CATEGORY_NAMES.get(entry.category, '')))
+        self.sort_keys = tuple((psk(entry.dir), psk(entry.basename), entry.size, psk(self.CATEGORY_NAMES.get(entry.category, '')), entry.word_count)
                                for entry in self.files)
         self.endResetModel()
 
@@ -274,11 +308,15 @@ class FilesModel(FileCollection):
                 return entry.basename
             if col == 2:
                 sz = entry.size / 1024.
-                return '%.2f ' % sz
+                return f'{sz:.2f} '
             if col == 3:
                 return self.CATEGORY_NAMES.get(entry.category)
+            if col == 4:
+                ans = entry.word_count
+                if ans > -1:
+                    return str(ans)
         elif role == Qt.ItemDataRole.TextAlignmentRole:
-            return Qt.AlignVCenter | self.alignments[index.column()]
+            return int(Qt.AlignVCenter | self.alignments[index.column()])  # https://bugreports.qt.io/browse/PYSIDE-1974
 
 
 class FilesWidget(QWidget):
@@ -325,8 +363,8 @@ class FilesWidget(QWidget):
 
 # }}}
 
-# Jump {{{
 
+# Jump {{{
 
 def jump_to_location(loc):
     from calibre.gui2.tweak_book.boss import get_boss
@@ -352,7 +390,7 @@ def jump_to_location(loc):
 class Jump:
 
     def __init__(self):
-        self.pos_map = defaultdict(lambda : -1)
+        self.pos_map = defaultdict(lambda: -1)
 
     def clear(self):
         self.pos_map.clear()
@@ -364,10 +402,11 @@ class Jump:
             jump_to_location(loc)
 
 
-jump = Jump()  # }}}
+jump = Jump()
+# }}}
+
 
 # Images {{{
-
 
 class ImagesDelegate(QStyledItemDelegate):
 
@@ -377,26 +416,31 @@ class ImagesDelegate(QStyledItemDelegate):
         QStyledItemDelegate.__init__(self, *args)
 
     def sizeHint(self, option, index):
-        ans = QStyledItemDelegate.sizeHint(self, option, index)
+        style = (option.styleObject or self.parent() or QApplication.instance()).style()
+        self.initStyleOption(option, index)
+        ans = style.sizeFromContents(QStyle.ContentsType.CT_ItemViewItem, option, QSize(), option.styleObject or self.parent())
         entry = index.data(Qt.ItemDataRole.UserRole)
         if entry is None:
             return ans
-        th = self.parent().thumbnail_height
+        th = int(self.parent().thumbnail_height * self.parent().devicePixelRatio())
         pmap = self.pixmap(th, entry._replace(usage=()), self.parent().devicePixelRatioF())
         if pmap.isNull():
             width = height = 0
         else:
-            width, height = pmap.width(), pmap.height()
+            width, height = int(pmap.width() / pmap.devicePixelRatio()), int(pmap.height() / pmap.devicePixelRatio())
         m = self.MARGIN * 2
         return QSize(max(width + m, ans.width()), height + m + self.MARGIN + ans.height())
 
     def paint(self, painter, option, index):
-        QStyledItemDelegate.paint(self, painter, option, ROOT)
+        style = (option.styleObject or self.parent() or QApplication.instance()).style()
+        self.initStyleOption(option, index)
+        option.text = ''
+        style.drawControl(QStyle.ControlElement.CE_ItemViewItem, option, painter, option.styleObject or self.parent())
         entry = index.data(Qt.ItemDataRole.UserRole)
         if entry is None:
             return
         painter.save()
-        th = self.parent().thumbnail_height
+        th = int(self.parent().thumbnail_height * self.parent().devicePixelRatio())
         pmap = self.pixmap(th, entry._replace(usage=()), painter.device().devicePixelRatioF())
         if pmap.isNull():
             bottom = option.rect.top()
@@ -456,19 +500,19 @@ class ImagesModel(FileCollection):
                 return entry.basename
             if col == 1:
                 sz = entry.size / 1024.
-                return ('%.2f' % sz if int(sz) != sz else str(sz))
+                return (f'{sz:.2f}' if int(sz) != sz else str(sz))
             if col == 2:
                 return str(len(entry.usage))
             if col == 3:
-                return '%d x %d' % (entry.width, entry.height)
+                return f'{entry.width} x {entry.height}'
         elif role == Qt.ItemDataRole.UserRole:
             try:
                 return self.files[index.row()]
             except IndexError:
                 pass
-        elif role == Qt.TextAlignmentRole:
+        elif role == Qt.ItemDataRole.TextAlignmentRole:
             with suppress(IndexError):
-                return self.alignments[index.column()]
+                return int(self.alignments[index.column()])  # https://bugreports.qt.io/browse/PYSIDE-1974
 
 
 class ImagesWidget(QWidget):
@@ -520,8 +564,8 @@ class ImagesWidget(QWidget):
         self.files.save_table('image-files-table')
 # }}}
 
-# Links {{{
 
+# Links {{{
 
 class LinksModel(FileCollection):
 
@@ -684,8 +728,8 @@ class LinksWidget(QWidget):
         save_state('links-view-splitter', bytearray(self.splitter.saveState()))
 # }}}
 
-# Words {{{
 
+# Words {{{
 
 class WordsModel(FileCollection):
 
@@ -726,7 +770,7 @@ class WordsModel(FileCollection):
             if col == 1:
                 ans = calibre_langcode_to_name(canonicalize_lang(entry.locale.langcode)) or ''
                 if entry.locale.countrycode:
-                    ans += ' (%s)' % entry.locale.countrycode
+                    ans += f' ({entry.locale.countrycode})'
                 return ans
             if col == 2:
                 return str(len(entry.usage))
@@ -735,9 +779,9 @@ class WordsModel(FileCollection):
                 return self.files[index.row()]
             except IndexError:
                 pass
-        elif role == Qt.TextAlignmentRole:
+        elif role == Qt.ItemDataRole.TextAlignmentRole:
             with suppress(IndexError):
-                return self.alignments[index.column()]
+                return int(self.alignments[index.column()])  # https://bugreports.qt.io/browse/PYSIDE-1974
 
     def location(self, index):
         return None
@@ -784,8 +828,8 @@ class WordsWidget(QWidget):
         self.words.save_table('words-table')
 # }}}
 
-# Characters {{{
 
+# Characters {{{
 
 class CharsModel(FileCollection):
 
@@ -827,9 +871,9 @@ class CharsModel(FileCollection):
                 return self.files[index.row()]
             except IndexError:
                 pass
-        elif role == Qt.TextAlignmentRole:
+        elif role == Qt.ItemDataRole.TextAlignmentRole:
             with suppress(IndexError):
-                return self.alignments[index.column()]
+                return int(self.alignments[index.column()])  # https://bugreports.qt.io/browse/PYSIDE-1974
 
     def location(self, index):
         return None
@@ -903,8 +947,8 @@ class CharsWidget(QWidget):
 
 # }}}
 
-# CSS {{{
 
+# CSS {{{
 
 class CSSRulesModel(QAbstractItemModel):
 
@@ -1076,7 +1120,7 @@ class CSSWidget(QWidget):
         o.addItems([_('Ascending'), _('Descending')])
         o.setCurrentIndex(0 if self.read_state('sort-ascending', True) else 1)
         o.setEditable(False)
-        o.currentIndexChanged[int].connect(self.resort)
+        o.currentIndexChanged.connect(self.resort)
         h.addWidget(o)
         h.addStretch(10)
         self.summary = la = QLabel('\xa0')
@@ -1152,8 +1196,8 @@ class CSSWidget(QWidget):
 
 # }}}
 
-# Classes {{{
 
+# Classes {{{
 
 class ClassesModel(CSSRulesModel):
 
@@ -1287,8 +1331,8 @@ class ClassesWidget(CSSWidget):
 
 # }}}
 
-# Wrapper UI {{{
 
+# Wrapper UI {{{
 
 class ReportsWidget(QWidget):
 
@@ -1358,7 +1402,7 @@ class ReportsWidget(QWidget):
             self.stack.widget(i)(data)
             if DEBUG:
                 category = self.reports.item(i).data(Qt.ItemDataRole.DisplayRole)
-                print('Widget time for %12s: %.2fs seconds' % (category, time.time() - st))
+                print(f'Widget time for {category:12}: {time.time() - st:.2f}s seconds')
 
     def save(self):
         save_state('splitter-state', bytearray(self.splitter.saveState()))
@@ -1374,7 +1418,7 @@ class ReportsWidget(QWidget):
                 'Export of %s data is not supported') % category, show=True)
         data = w.to_csv()
         fname = choose_save_file(self, 'report-csv-export', _('Choose a filename for the data'), filters=[
-            (_('CSV files'), ['csv'])], all_files=False, initial_filename='%s.csv' % category)
+            (_('CSV files'), ['csv'])], all_files=False, initial_filename=f'{category}.csv')
         if fname:
             with open(fname, 'wb') as f:
                 f.write(as_bytes(data))
@@ -1391,7 +1435,7 @@ class Reports(Dialog):
         Dialog.__init__(self, _('Reports'), 'reports-dialog', parent=parent)
         self.data_gathered.connect(self.display_data, type=Qt.ConnectionType.QueuedConnection)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, False)
-        self.setWindowIcon(QIcon(I('reports.png')))
+        self.setWindowIcon(QIcon.ic('reports.png'))
 
     def setup_ui(self):
         self.l = l = QVBoxLayout(self)
@@ -1414,10 +1458,10 @@ class Reports(Dialog):
         self.bb.setStandardButtons(QDialogButtonBox.StandardButton.Close)
         self.refresh_button = b = self.bb.addButton(_('&Refresh'), QDialogButtonBox.ButtonRole.ActionRole)
         b.clicked.connect(self.refresh)
-        b.setIcon(QIcon(I('view-refresh.png')))
+        b.setIcon(QIcon.ic('view-refresh.png'))
         self.save_button = b = self.bb.addButton(_('&Save'), QDialogButtonBox.ButtonRole.ActionRole)
         b.clicked.connect(self.reports.to_csv)
-        b.setIcon(QIcon(I('save.png')))
+        b.setIcon(QIcon.ic('save.png'))
         b.setToolTip(_('Export the currently shown report as a CSV file'))
 
     def sizeHint(self):
@@ -1460,7 +1504,7 @@ class Reports(Dialog):
         data, timing = data
         if DEBUG:
             for x, t in sorted(iteritems(timing), key=itemgetter(1)):
-                print('Time for %6s data: %.3f seconds' % (x, t))
+                print(f'Time for {x:6} data: {t:.3f} seconds')
         self.reports(data)
 
     def accept(self):
@@ -1475,8 +1519,9 @@ class Reports(Dialog):
 
 
 if __name__ == '__main__':
-    from calibre.gui2 import Application
     import sys
+
+    from calibre.gui2 import Application
     app = Application([])
     from calibre.gui2.tweak_book import set_current_container
     from calibre.gui2.tweak_book.boss import get_container

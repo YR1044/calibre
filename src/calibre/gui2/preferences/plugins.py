@@ -5,24 +5,21 @@ __license__   = 'GPL v3'
 __copyright__ = '2010, Kovid Goyal <kovid@kovidgoyal.net>'
 __docformat__ = 'restructuredtext en'
 
-import textwrap, os
+import os
+import textwrap
 from collections import OrderedDict
 
-from qt.core import (Qt, QMenu, QModelIndex, QAbstractItemModel, QIcon,
-        QBrush, QDialog, QItemSelectionModel, QAbstractItemView)
+from qt.core import QAbstractItemModel, QAbstractItemView, QBrush, QDialog, QIcon, QItemSelectionModel, QMenu, QModelIndex, Qt
 
+from calibre.constants import iswindows
+from calibre.customize import PluginInstallationType
+from calibre.customize.ui import NameConflict, add_plugin, disable_plugin, enable_plugin, initialized_plugins, is_disabled, plugin_customization, remove_plugin
+from calibre.gui2 import choose_files, error_dialog, gprefs, info_dialog, question_dialog
+from calibre.gui2.dialogs.confirm_delete import confirm
 from calibre.gui2.preferences import ConfigWidgetBase, test_widget
 from calibre.gui2.preferences.plugins_ui import Ui_Form
-from calibre.customize import PluginInstallationType
-from calibre.customize.ui import (initialized_plugins, is_disabled, enable_plugin,
-                                 disable_plugin, plugin_customization, add_plugin,
-                                 remove_plugin, NameConflict)
-from calibre.gui2 import (error_dialog, info_dialog, choose_files,
-        question_dialog, gprefs)
-from calibre.gui2.dialogs.confirm_delete import confirm
-from calibre.utils.search_query_parser import SearchQueryParser
 from calibre.utils.icu import lower
-from calibre.constants import iswindows
+from calibre.utils.search_query_parser import SearchQueryParser
 from polyglot.builtins import iteritems, itervalues
 
 
@@ -38,8 +35,8 @@ class PluginModel(QAbstractItemModel, AdaptSQP):  # {{{
         QAbstractItemModel.__init__(self)
         SearchQueryParser.__init__(self, ['all'])
         self.show_only_user_plugins = show_only_user_plugins
-        self.icon = QIcon(I('plugins.png'))
-        p = QIcon(self.icon).pixmap(64, 64, QIcon.Mode.Disabled, QIcon.State.On)
+        self.icon = QIcon.ic('plugins.png')
+        p = self.icon.pixmap(64, 64, QIcon.Mode.Disabled, QIcon.State.On)
         self.disabled_icon = QIcon(p)
         self._p = p
         self.populate()
@@ -189,9 +186,8 @@ class PluginModel(QAbstractItemModel, AdaptSQP):  # {{{
 
     def flags(self, index):
         if not index.isValid():
-            return 0
-        flags = Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled
-        return flags
+            return Qt.ItemFlag.NoItemFlags
+        return Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled
 
     def data(self, index, role):
         if not index.isValid():
@@ -205,7 +201,7 @@ class PluginModel(QAbstractItemModel, AdaptSQP):  # {{{
             if role == Qt.ItemDataRole.DisplayRole:
                 ver = '.'.join(map(str, plugin.version))
                 desc = '\n'.join(textwrap.wrap(plugin.description, 100))
-                ans='%s (%s) %s %s\n%s'%(plugin.name, ver, _('by'), plugin.author, desc)
+                ans='{} ({}) {} {}\n{}'.format(plugin.name, ver, _('by'), plugin.author, desc)
                 c = plugin_customization(plugin)
                 if c and not disabled:
                     ans += _('\nCustomization: ')+c
@@ -222,8 +218,8 @@ class PluginModel(QAbstractItemModel, AdaptSQP):  # {{{
                 return plugin
         return None
 
-
 # }}}
+
 
 class ConfigWidget(ConfigWidgetBase, Ui_Form):
 
@@ -234,7 +230,7 @@ class ConfigWidget(ConfigWidgetBase, Ui_Form):
         self._plugin_model = PluginModel(self.user_installed_plugins.isChecked())
         self.plugin_view.setModel(self._plugin_model)
         self.plugin_view.setStyleSheet(
-                "QTreeView::item { padding-bottom: 10px;}")
+                'QTreeView::item { padding-bottom: 10px;}')
         self.plugin_view.doubleClicked.connect(self.double_clicked)
         self.toggle_plugin_button.clicked.connect(self.toggle_plugin)
         self.customize_plugin_button.clicked.connect(self.customize_plugin)
@@ -305,7 +301,7 @@ class ConfigWidget(ConfigWidgetBase, Ui_Form):
         self.modify_plugin(op='remove')
 
     def add_plugin(self):
-        info = '' if iswindows else ' [.zip %s]'%_('files')
+        info = '' if iswindows else ' [.zip {}]'.format(_('files'))
         path = choose_files(self, 'add a plugin dialog', _('Add plugin'),
                 filters=[(_('Plugins') + info, ['zip'])], all_files=False,
                     select_only_single_file=True)
@@ -332,14 +328,13 @@ class ConfigWidget(ConfigWidgetBase, Ui_Form):
             self._plugin_model.endResetModel()
             self.changed_signal.emit()
             self.check_for_add_to_toolbars(plugin, previously_installed=plugin.name in installed_plugins)
-            info_dialog(self, _('Success'),
-                    _('Plugin <b>{0}</b> successfully installed under <b>'
-                        '{1}</b>. You may have to restart calibre '
-                        'for the plugin to take effect.').format(plugin.name, plugin.type),
-                    show=True, show_copy_button=False)
+            from calibre.gui2.dialogs.plugin_updater import notify_on_successful_install
+            do_restart = notify_on_successful_install(self, plugin)
             idx = self._plugin_model.plugin_to_index_by_properties(plugin)
             if idx.isValid():
                 self.highlight_index(idx)
+            if do_restart:
+                self.restart_now.emit()
         else:
             error_dialog(self, _('No valid plugin path'),
                          _('%s is not a valid plugin path')%path).exec()
@@ -404,8 +399,7 @@ class ConfigWidget(ConfigWidgetBase, Ui_Form):
         self.update_plugins(not_installed=True)
 
     def update_plugins(self, not_installed=False):
-        from calibre.gui2.dialogs.plugin_updater import (PluginUpdaterDialog,
-                                FILTER_UPDATE_AVAILABLE, FILTER_NOT_INSTALLED)
+        from calibre.gui2.dialogs.plugin_updater import FILTER_NOT_INSTALLED, FILTER_UPDATE_AVAILABLE, PluginUpdaterDialog
         mode = FILTER_NOT_INSTALLED if not_installed else FILTER_UPDATE_AVAILABLE
         d = PluginUpdaterDialog(self.gui, initial_filter=mode)
         d.exec()
@@ -422,8 +416,8 @@ class ConfigWidget(ConfigWidgetBase, Ui_Form):
             self.gui.iactions['Store'].load_menu()
 
     def check_for_add_to_toolbars(self, plugin, previously_installed=True):
+        from calibre.customize import EditBookToolPlugin, InterfaceActionBase
         from calibre.gui2.preferences.toolbar import ConfigWidget
-        from calibre.customize import InterfaceActionBase, EditBookToolPlugin
 
         if isinstance(plugin, EditBookToolPlugin):
             return self.check_for_add_to_editor_toolbar(plugin, previously_installed)
@@ -474,6 +468,6 @@ class ConfigWidget(ConfigWidgetBase, Ui_Form):
 
 
 if __name__ == '__main__':
-    from qt.core import QApplication
-    app = QApplication([])
+    from calibre.gui2 import Application
+    app = Application([])
     test_widget('Advanced', 'Plugins')

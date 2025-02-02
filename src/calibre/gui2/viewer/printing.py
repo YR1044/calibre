@@ -8,24 +8,32 @@ import sys
 from threading import Thread
 
 from qt.core import (
-    QCheckBox, QDoubleSpinBox, QFormLayout, QHBoxLayout, QIcon, QLabel, QDialog,
-    QLineEdit, QPageSize, QProgressDialog, QTimer, QToolButton, QVBoxLayout
+    QCheckBox,
+    QDialog,
+    QDoubleSpinBox,
+    QFormLayout,
+    QHBoxLayout,
+    QIcon,
+    QLabel,
+    QLineEdit,
+    QPageSize,
+    QProgressDialog,
+    QTimer,
+    QToolButton,
+    QVBoxLayout,
 )
 
 from calibre import sanitize_file_name
 from calibre.ebooks.conversion.plugins.pdf_output import PAPER_SIZES
-from calibre.gui2 import (
-    Application, choose_save_file, dynamic, elided_text, error_dialog,
-    open_local_file
-)
+from calibre.gui2 import Application, choose_save_file, dynamic, elided_text, error_dialog, open_local_file
 from calibre.gui2.widgets import PaperSizes
 from calibre.gui2.widgets2 import Dialog
 from calibre.ptempfile import PersistentTemporaryFile
 from calibre.utils.config import JSONConfig
 from calibre.utils.filenames import expanduser
 from calibre.utils.ipc.simple_worker import start_pipe_worker
+from calibre.utils.localization import _
 from calibre.utils.serialize import msgpack_dumps, msgpack_loads
-
 
 vprefs = JSONConfig('viewer')
 
@@ -37,7 +45,7 @@ class PrintDialog(Dialog):
     def __init__(self, book_title, parent=None, prefs=vprefs):
         self.book_title = book_title
         self.default_file_name = sanitize_file_name(book_title[:75] + '.pdf')
-        self.paper_size_map = {a:getattr(QPageSize, a.capitalize()) for a in PAPER_SIZES}
+        self.paper_size_map = {a:getattr(QPageSize.PageSizeId, a.capitalize()) for a in PAPER_SIZES}
         Dialog.__init__(self, _('Print to PDF'), 'print-to-pdf', prefs=prefs, parent=parent)
 
     def setup_ui(self):
@@ -55,7 +63,7 @@ class PrintDialog(Dialog):
             val = os.path.dirname(val)
         f.setText(os.path.abspath(os.path.join(val, self.default_file_name)))
         self.browse_button = b = QToolButton(self)
-        b.setIcon(QIcon(I('document_open.png'))), b.setToolTip(_('Choose location for PDF file'))
+        b.setIcon(QIcon.ic('document_open.png')), b.setToolTip(_('Choose location for PDF file'))
         b.clicked.connect(self.choose_file)
         h.addWidget(f), h.addWidget(b)
         f.setMinimumWidth(350)
@@ -76,9 +84,9 @@ class PrintDialog(Dialog):
             m = QDoubleSpinBox(self)
             m.setSuffix(' ' + _('inches'))
             m.setMinimum(0), m.setMaximum(3), m.setSingleStep(0.1)
-            val = vprefs.get('print-to-pdf-%s-margin' % edge, 1)
+            val = vprefs.get(f'print-to-pdf-{edge}-margin', 1)
             m.setValue(val)
-            setattr(self, '%s_margin' % edge, m)
+            setattr(self, f'{edge}_margin', m)
             l.addRow(tmap[edge], m)
         self.pnum = pnum = QCheckBox(_('Add page &number to printed pages'), self)
         pnum.setChecked(vprefs.get('print-to-pdf-page-numbers', True))
@@ -106,7 +114,7 @@ class PrintDialog(Dialog):
             'show_file':self.show_file.isChecked(),
         }
         for edge in 'left top right bottom'.split():
-            ans['margin_' + edge] = getattr(self, '%s_margin' % edge).value()
+            ans['margin_' + edge] = getattr(self, f'{edge}_margin').value()
         return ans
 
     def choose_file(self):
@@ -121,7 +129,7 @@ class PrintDialog(Dialog):
         vprefs['print-to-pdf-page-numbers'] = data['page_numbers']
         vprefs['print-to-pdf-show-file'] = data['show_file']
         for edge in 'left top right bottom'.split():
-            vprefs['print-to-pdf-%s-margin' % edge] = data['margin_' + edge]
+            vprefs[f'print-to-pdf-{edge}-margin'] = data['margin_' + edge]
 
     def accept(self):
         fname = self.file_name.text().strip()
@@ -180,7 +188,7 @@ def do_print():
     if data['page_numbers']:
         args.append('--pdf-page-numbers')
     for edge in 'left top right bottom'.split():
-        args.append('--pdf-page-margin-' + edge), args.append('%.1f' % (data['margin_' + edge] * 72))
+        args.append('--pdf-page-margin-' + edge), args.append('{:.1f}'.format(data['margin_' + edge] * 72))
     from calibre.ebooks.conversion.cli import main
     main(args)
 
@@ -191,7 +199,7 @@ class Printing(QProgressDialog):
         QProgressDialog.__init__(self, _('Printing, this will take a while, please wait...'), _('&Cancel'), 0, 0, parent)
         self.show_file = show_file
         self.setWindowTitle(_('Printing...'))
-        self.setWindowIcon(QIcon(I('print.png')))
+        self.setWindowIcon(QIcon.ic('print.png'))
         self.thread = thread
         self.timer = t = QTimer(self)
         t.timeout.connect(self.check)

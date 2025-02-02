@@ -2,18 +2,43 @@
 # License: GPLv3 Copyright: 2014, Kovid Goyal <kovid at kovidgoyal.net>
 
 import re
-import regex
 import unicodedata
 from collections import OrderedDict, namedtuple
 from difflib import SequenceMatcher
 from functools import partial
 from itertools import chain
 from math import ceil
+
+import regex
 from qt.core import (
-    QApplication, QBrush, QColor, QCursor, QEvent, QEventLoop, QFont, QHBoxLayout,
-    QIcon, QImage, QKeySequence, QMenu, QPainter, QPainterPath, QPalette, QPen,
-    QPixmap, QPlainTextEdit, QRect, QScrollBar, QSplitter, QSplitterHandle, Qt,
-    QTextCharFormat, QTextCursor, QTextLayout, QTimer, QWidget, pyqtSignal
+    QApplication,
+    QBrush,
+    QColor,
+    QEvent,
+    QEventLoop,
+    QFont,
+    QHBoxLayout,
+    QIcon,
+    QImage,
+    QKeySequence,
+    QMenu,
+    QPainter,
+    QPainterPath,
+    QPalette,
+    QPen,
+    QPixmap,
+    QPlainTextEdit,
+    QRect,
+    QScrollBar,
+    QSplitter,
+    QSplitterHandle,
+    Qt,
+    QTextCharFormat,
+    QTextCursor,
+    QTextLayout,
+    QTimer,
+    QWidget,
+    pyqtSignal,
 )
 
 from calibre import fit_image, human_readable
@@ -21,24 +46,15 @@ from calibre.gui2 import info_dialog
 from calibre.gui2.tweak_book import tprefs
 from calibre.gui2.tweak_book.diff import get_sequence_matcher
 from calibre.gui2.tweak_book.diff.highlight import get_highlighter
-from calibre.gui2.tweak_book.editor.text import (
-    LineNumbers, PlainTextEdit, default_font_family
-)
+from calibre.gui2.tweak_book.editor.text import LineNumbers, PlainTextEdit, default_font_family
 from calibre.gui2.tweak_book.editor.themes import get_theme, theme_color
+from calibre.gui2.widgets import BusyCursor
+from calibre.startup import connect_lambda
 from calibre.utils.icu import utf16_length
 from calibre.utils.xml_parse import safe_xml_fromstring
 from polyglot.builtins import as_bytes, iteritems
 
 Change = namedtuple('Change', 'ltop lbot rtop rbot kind')
-
-
-class BusyCursor:
-
-    def __enter__(self):
-        QApplication.setOverrideCursor(QCursor(Qt.CursorShape.WaitCursor))
-
-    def __exit__(self, *args):
-        QApplication.restoreOverrideCursor()
 
 
 def beautify_text(raw, syntax):
@@ -48,10 +64,14 @@ def beautify_text(raw, syntax):
     from calibre.ebooks.oeb.polish.parsing import parse
     from calibre.ebooks.oeb.polish.pretty import pretty_html_tree, pretty_xml_tree
     if syntax == 'xml':
-        root = safe_xml_fromstring(strip_encoding_declarations(raw))
+        try:
+            root = safe_xml_fromstring(strip_encoding_declarations(raw))
+        except etree.XMLSyntaxError:
+            return raw
         pretty_xml_tree(root)
     elif syntax == 'css':
         import logging
+
         from css_parser import CSSParser, log
 
         from calibre.ebooks.oeb.base import _css_logger, serialize
@@ -63,7 +83,7 @@ def beautify_text(raw, syntax):
                            # We dont care about @import rules
                            fetcher=lambda x: (None, None), log=_css_logger)
         data = parser.parseString(raw, href='<string>', validate=False)
-        return serialize(data, 'text/css')
+        return serialize(data, 'text/css').decode('utf-8')
     else:
         root = parse(raw, line_numbers=False)
         pretty_html_tree(None, root)
@@ -117,7 +137,7 @@ class TextBrowser(PlainTextEdit):  # {{{
         font.setPointSizeF(tprefs['editor_font_size'])
         self.setFont(font)
         self.calculate_metrics()
-        self.setTabStopWidth(tprefs['editor_tab_stop_width'] * self.space_width)
+        self.setTabStopDistance(tprefs['editor_tab_stop_width'] * self.space_width)
         font = self.heading_font = QFont(self.font())
         font.setPointSizeF(tprefs['editor_font_size'] * 1.5)
         font.setBold(True)
@@ -157,34 +177,34 @@ class TextBrowser(PlainTextEdit):  # {{{
         for x in ('replacereplace', 'insert', 'delete'):
             f = QTextCharFormat()
             f.setBackground(self.diff_backgrounds[x])
-            setattr(self, '%s_format' % x, f)
+            setattr(self, f'{x}_format', f)
 
     def calculate_metrics(self):
-        w = self.fontMetrics()
-        self.number_width = max(map(lambda x:w.width(str(x)), range(10)))
-        self.space_width = w.width(' ')
+        fm = self.fontMetrics()
+        self.number_width = max(fm.horizontalAdvance(str(x)) for x in range(10))
+        self.space_width = fm.horizontalAdvance(' ')
 
     def show_context_menu(self, pos):
         m = QMenu(self)
         a = m.addAction
         i = str(self.textCursor().selectedText()).rstrip('\0')
         if i:
-            a(QIcon(I('edit-copy.png')), _('Copy to clipboard'), self.copy).setShortcut(QKeySequence.StandardKey.Copy)
+            a(QIcon.ic('edit-copy.png'), _('Copy to clipboard'), self.copy).setShortcut(QKeySequence.StandardKey.Copy)
 
         if len(self.changes) > 0:
-            a(QIcon(I('arrow-up.png')), _('Previous change'), partial(self.next_change.emit, -1))
-            a(QIcon(I('arrow-down.png')), _('Next change'), partial(self.next_change.emit, 1))
+            a(QIcon.ic('arrow-up.png'), _('Previous change'), partial(self.next_change.emit, -1))
+            a(QIcon.ic('arrow-down.png'), _('Next change'), partial(self.next_change.emit, 1))
 
         if self.show_open_in_editor:
             b = self.cursorForPosition(pos).block()
             if b.isValid():
-                a(QIcon(I('tweak.png')), _('Open file in the editor'), partial(self.generate_sync_request, b.blockNumber()))
+                a(QIcon.ic('tweak.png'), _('Open file in the editor'), partial(self.generate_sync_request, b.blockNumber()))
 
         if len(m.actions()) > 0:
             m.exec(self.mapToGlobal(pos))
 
     def mouseDoubleClickEvent(self, ev):
-        if ev.button() == 1:
+        if ev.button() == Qt.MouseButton.LeftButton:
             b = self.cursorForPosition(ev.pos()).block()
             if b.isValid():
                 self.generate_sync_request(b.blockNumber())
@@ -252,7 +272,7 @@ class TextBrowser(PlainTextEdit):  # {{{
             break
         else:
             info_dialog(self, _('No matches found'), _(
-                'No matches found for query: %s' % query), show=True)
+                'No matches found for query: {}').format(query), show=True)
 
     def clear(self):
         PlainTextEdit.clear(self)
@@ -368,7 +388,7 @@ class TextBrowser(PlainTextEdit):  # {{{
             if min(y_top, y_bot) > floor:
                 break
             if y_top != y_bot:
-                painter.fillRect(0,  int(y_top), int(w), int(y_bot - y_top), self.diff_backgrounds[kind])
+                painter.fillRect(0, int(y_top), int(w), int(y_bot - y_top), self.diff_backgrounds[kind])
             lines.append((y_top, y_bot, kind))
             if top in self.images:
                 img, maxw = self.images[top][:2]
@@ -511,7 +531,7 @@ class DiffSplit(QSplitter):  # {{{
 
         self.left, self.right = TextBrowser(parent=self), TextBrowser(right=True, parent=self, show_open_in_editor=show_open_in_editor)
         self.addWidget(self.left), self.addWidget(self.right)
-        self.split_words = re.compile(r"\w+|\W", re.UNICODE)
+        self.split_words = re.compile(r'\w+|\W', re.UNICODE)
         self.clear()
 
     def createHandle(self):
@@ -531,8 +551,8 @@ class DiffSplit(QSplitter):  # {{{
         left_text, right_text = left_text or '', right_text or ''
         is_identical = len(left_text) == len(right_text) and left_text == right_text and left_name == right_name
         is_text = isinstance(left_text, str) and isinstance(right_text, str)
-        left_name = left_name or '[%s]'%_('This file was added')
-        right_name = right_name or '[%s]'%_('This file was removed')
+        left_name = left_name or '[{}]'.format(_('This file was added'))
+        right_name = right_name or '[{}]'.format(_('This file was removed'))
         self.left.headers.append((self.left.blockCount() - 1, left_name))
         self.right.headers.append((self.right.blockCount() - 1, right_name))
         for v in (self.left, self.right):
@@ -545,7 +565,7 @@ class DiffSplit(QSplitter):  # {{{
                 for v in (self.left, self.right):
                     c = v.textCursor()
                     c.movePosition(QTextCursor.MoveOperation.End)
-                    c.insertText('[%s]\n\n' % _('The files are identical'))
+                    c.insertText('[{}]\n\n'.format(_('The files are identical')))
             elif left_name != right_name and not left_text and not right_text:
                 self.add_text_diff(_('[This file was renamed to %s]') % right_name, _('[This file was renamed from %s]') % left_name, context, None)
                 for v in (self.left, self.right):
@@ -555,7 +575,7 @@ class DiffSplit(QSplitter):  # {{{
             elif syntax == 'raster_image':
                 self.add_image_diff(left_text, right_text)
             else:
-                text = '[%s]' % _('Binary file of size: %s')
+                text = '[{}]'.format(_('Binary file of size: %s'))
                 left_text, right_text = text % human_readable(len(left_text)), text % human_readable(len(right_text))
                 self.add_text_diff(left_text, right_text, None, None)
                 for v in (self.left, self.right):
@@ -680,7 +700,7 @@ class DiffSplit(QSplitter):  # {{{
                 for v in (self.left, self.right):
                     c = v.textCursor()
                     c.movePosition(QTextCursor.MoveOperation.End)
-                    c.insertText('[%s]\n\n' % _('The files are identical after beautifying'))
+                    c.insertText('[{}]\n\n'.format(_('The files are identical after beautifying')))
                 return
 
         left_lines = self.left_lines = left_text.splitlines()
@@ -879,12 +899,12 @@ class DiffSplit(QSplitter):  # {{{
             for word in words[lo:hi]:
                 if word == '\n':
                     if fmts:
-                        block.layout().setAdditionalFormats(fmts)
+                        block.layout().setFormats(fmts)
                     pos, block, fmts = 0, block.next(), []
                     continue
 
                 if tag in {'replace', 'insert', 'delete'}:
-                    fmt = getattr(self.left, '%s_format' % ('replacereplace' if tag == 'replace' else tag))
+                    fmt = getattr(self.left, '{}_format'.format('replacereplace' if tag == 'replace' else tag))
                     f = QTextLayout.FormatRange()
                     f.start, f.length, f.format = pos, len(word), fmt
                     fmts.append(f)
@@ -897,7 +917,7 @@ class DiffSplit(QSplitter):  # {{{
             rsb, rpos, rfmts = do_tag(rsb, rl, rlo, rhi, rpos, rfmts)
         for block, fmts in ((lsb, lfmts), (rsb, rfmts)):
             if fmts:
-                block.layout().setAdditionalFormats(fmts)
+                block.layout().setFormats(fmts)
     # }}}
 
 # }}}

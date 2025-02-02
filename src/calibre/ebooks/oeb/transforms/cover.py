@@ -73,7 +73,7 @@ class CoverManager:
             style = 'style="height: 100%%"'
         else:
             width, height = fixed_size
-            style = 'style="height: %s; width: %s"'%(height, width)
+            style = f'style="height: {height}; width: {width}"'
         self.non_svg_template = self.NONSVG_TEMPLATE.replace('__style__',
                 style)
 
@@ -140,9 +140,9 @@ class CoverManager:
                 self.log.warning('Failed to read cover dimensions')
                 width, height = 600, 800
             # if self.preserve_aspect_ratio:
-            #    width, height = 600, 800
+            #     width, height = 600, 800
             self.svg_template = self.svg_template.replace('__viewbox__',
-                    '0 0 %d %d'%(width, height))
+                    f'0 0 {width} {height}')
             self.svg_template = self.svg_template.replace('__width__',
                     str(width))
             self.svg_template = self.svg_template.replace('__height__',
@@ -159,6 +159,8 @@ class CoverManager:
             item = self.oeb.manifest.hrefs[
                     urldefrag(self.oeb.guide['titlepage'].href)[0]]
         if item is not None:
+            if item in self.oeb.spine:
+                self.oeb.spine.remove(item)
             self.oeb.spine.insert(0, item, True)
             if 'cover' not in self.oeb.guide.refs:
                 self.oeb.guide.add('cover', 'Title page', 'a')

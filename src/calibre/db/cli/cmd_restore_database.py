@@ -54,7 +54,7 @@ class Progress:
         if msg is None:
             self.total = float(step)
         else:
-            prints(msg, '...', '%d%%' % int(100 * (step / self.total)))
+            prints(msg, '...', f'{int(100*(step/self.total))}%')
 
 
 def main(opts, args, dbctx):
@@ -76,8 +76,8 @@ def main(opts, args, dbctx):
         prints('old database saved as', r.olddb)
         if r.errors_occurred:
             name = 'calibre_db_restore_report.txt'
-            lopen('calibre_db_restore_report.txt',
+            open('calibre_db_restore_report.txt',
                   'wb').write(r.report.encode('utf-8'))
-            prints('Some errors occurred. A detailed report was ' 'saved to', name)
+            prints('Some errors occurred. A detailed report was saved to', name)
 
     return 0

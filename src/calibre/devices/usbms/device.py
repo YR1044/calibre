@@ -1,6 +1,6 @@
 __license__   = 'GPL v3'
-__copyright__ = '2009, John Schember <john at nachtimwald.com> ' \
-                '2009, Kovid Goyal <kovid@kovidgoyal.net>'
+__copyright__ = ('2009, John Schember <john at nachtimwald.com> '
+                 '2009, Kovid Goyal <kovid@kovidgoyal.net>')
 __docformat__ = 'restructuredtext en'
 
 '''
@@ -19,7 +19,7 @@ from collections import namedtuple
 from itertools import repeat
 
 from calibre import prints
-from calibre.constants import DEBUG, isfreebsd, islinux, ismacos, iswindows
+from calibre.constants import is_debugging, isfreebsd, islinux, ismacos, iswindows
 from calibre.devices.errors import DeviceError
 from calibre.devices.interface import DevicePlugin
 from calibre.devices.usbms.deviceconfig import DeviceConfig
@@ -73,7 +73,6 @@ class USBDevice:
 
 
 class Device(DeviceConfig, DevicePlugin):
-
     '''
     This class provides logic common to all drivers for devices that export themselves
     as USB Mass Storage devices. Provides implementations for mounting/ejecting
@@ -175,7 +174,7 @@ class Device(DeviceConfig, DevicePlugin):
             casz = self._windows_space(self._card_a_prefix)[0]
             cbsz = self._windows_space(self._card_b_prefix)[0]
 
-        return (msz, casz, cbsz)
+        return msz, casz, cbsz
 
     def free_space(self, end_session=True):
         msz = casz = cbsz = 0
@@ -194,7 +193,7 @@ class Device(DeviceConfig, DevicePlugin):
             casz = self._windows_space(self._card_a_prefix)[1]
             cbsz = self._windows_space(self._card_b_prefix)[1]
 
-        return (msz, casz, cbsz)
+        return msz, casz, cbsz
 
     def windows_filter_pnp_id(self, pnp_id):
         return False
@@ -236,7 +235,7 @@ class Device(DeviceConfig, DevicePlugin):
         from calibre.devices.scanner import drive_is_ok
         from calibre.devices.winusb import get_drive_letters_for_device
         usbdev = self.device_being_opened
-        debug = DEBUG or getattr(self, 'do_device_debug', False)
+        debug = is_debugging() or getattr(self, 'do_device_debug', False)
         try:
             dlmap = get_drive_letters_for_device(usbdev, debug=debug)
         except Exception:
@@ -257,7 +256,7 @@ class Device(DeviceConfig, DevicePlugin):
             if dl in dlmap['readonly_drives']:
                 filtered.add(dl)
                 if debug:
-                    prints('Ignoring the drive %s as it is readonly' % dl)
+                    prints(f'Ignoring the drive {dl} as it is readonly')
             elif self.windows_filter_pnp_id(pnp_id):
                 filtered.add(dl)
                 if debug:
@@ -265,7 +264,7 @@ class Device(DeviceConfig, DevicePlugin):
             elif not drive_is_ok(dl, debug=debug):
                 filtered.add(dl)
                 if debug:
-                    prints('Ignoring the drive %s because failed to get free space for it' % dl)
+                    prints(f'Ignoring the drive {dl} because failed to get free space for it')
         dlmap['drive_letters'] = [dl for dl in dlmap['drive_letters'] if dl not in filtered]
 
         if not dlmap['drive_letters']:
@@ -393,8 +392,18 @@ class Device(DeviceConfig, DevicePlugin):
         bsd_drives = self.osx_bsd_names()
         drives = self.osx_sort_names(bsd_drives.copy())
         mount_map = get_mounted_filesystems()
+        # macOS 13 Ventura uses a weird scheme for mounted FAT devices of the
+        # form fat://basename_of_bsd_name/basename_of_mountpoint
+        # see https://www.mobileread.com/forums/showthread.php?t=347294
+        for dev_node in tuple(mount_map):
+            if ':' in dev_node and '//' in dev_node:
+                val = mount_map[dev_node]
+                dev_node = dev_node.split('/')[-2]
+                dev_node = f'/dev/{dev_node}'
+                if dev_node not in mount_map:
+                    mount_map[dev_node] = val
         drives = {k: mount_map.get(v) for k, v in iteritems(drives)}
-        if DEBUG:
+        if is_debugging():
             print()
             from pprint import pprint
             pprint({'bsd_drives': bsd_drives, 'mount_map': mount_map, 'drives': drives})
@@ -501,13 +510,13 @@ class Device(DeviceConfig, DevicePlugin):
                             ok[node] = False
                     except:
                         ok[node] = False
-                    if DEBUG and not ok[node]:
+                    if is_debugging() and not ok[node]:
                         print(f'\nIgnoring the node: {node} as could not read size from: {sz}')
 
                     devnodes.append(node)
 
         devnodes += list(repeat(None, 3))
-        ans = ['/dev/'+x if ok.get(x, False) else None for x in devnodes]
+        ans = ['/dev/'+x if ok.get(x) else None for x in devnodes]
         ans.sort(key=lambda x: x[5:] if x else 'zzzzz')
         return self.linux_swap_drives(ans[:3])
 
@@ -568,7 +577,7 @@ class Device(DeviceConfig, DevicePlugin):
             'the device has already been ejected, or your '
             'kernel is exporting a deprecated version of SYSFS.')
                     %self.__class__.__name__)
-        if DEBUG:
+        if is_debugging():
             print('\nFound device nodes:', main, carda, cardb)
 
         self._linux_mount_map = {}
@@ -588,7 +597,7 @@ class Device(DeviceConfig, DevicePlugin):
                 continue
             mp, ret = mount(card, typ)
             if mp is None:
-                print('Unable to mount card (Error code: %d)'%ret, file=sys.stderr)
+                print(f'Unable to mount card (Error code: {ret})', file=sys.stderr)
             else:
                 if not mp.endswith('/'):
                     mp += '/'
@@ -605,7 +614,7 @@ class Device(DeviceConfig, DevicePlugin):
             path = os.path.join(mp, 'calibre_readonly_test')
             ro = True
             try:
-                with lopen(path, 'wb'):
+                with open(path, 'wb'):
                     ro = False
             except:
                 pass
@@ -614,7 +623,7 @@ class Device(DeviceConfig, DevicePlugin):
                     os.remove(path)
                 except:
                     pass
-            if DEBUG and ro:
+            if is_debugging() and ro:
                 print('\nThe mountpoint', mp, 'is readonly, ignoring it')
             return ro
 
@@ -663,7 +672,7 @@ class Device(DeviceConfig, DevicePlugin):
         hal = get_hal()
         vols = hal.get_volumes(d)
         if verbose:
-            print("FBSD:	", vols)
+            print('FBSD:\t', vols)
 
         ok, mv = hal.mount_volumes(vols)
         if not ok:
